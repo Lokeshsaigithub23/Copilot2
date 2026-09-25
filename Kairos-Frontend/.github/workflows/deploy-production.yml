@@ -1,0 +1,78 @@
+name: Deploy production
+
+# Manual only. Production is never deployed automatically on push.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-frontend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FIREBASE_PROJECT: copilotiq-prod
+  SITE_URL: https://myinterviewcopilot.com
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy to production
+    runs-on: ubuntu-latest
+    # Gated by the kairos-production environment; add required reviewers there
+    # to make every production deploy need a human approval.
+    environment: kairos-production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Default mode reads .env.production -- the copilotiq-prod Firebase
+      # project and the production API. Staging uses --mode staging.
+      - name: Build
+        run: npm run build
+
+      - name: Verify the bundle is wired to production, not staging
+        run: |
+          set -euo pipefail
+          grep -rq 'https://copilot-api.myinterviewcopilot.com' dist/assets/*.js \
+            || { echo "::error::Production API URL missing from bundle"; exit 1; }
+          grep -rq 'copilotiq-prod' dist/assets/*.js \
+            || { echo "::error::copilotiq-prod Firebase project missing -- Google sign-in would 401"; exit 1; }
+          if grep -rq 'copilotiq-api.myinterviewcopilot.com' dist/assets/*.js; then
+            echo "::error::Bundle points at the STAGING API. Wrong build mode."
+            exit 1
+          fi
+          if grep -rq 'ai-communication-copilot-7f9c0' dist/assets/*.js; then
+            echo "::error::Bundle carries the STAGING Firebase project. Wrong build mode."
+            exit 1
+          fi
+          echo "Bundle verified as production."
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
+          projectId: ${{ env.FIREBASE_PROJECT }}
+          channelId: live
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$SITE_URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Smoke test passed ($SITE_URL -> 200)"
+              exit 0
+            fi
+            echo "attempt $i: $SITE_URL -> $CODE"
+            sleep 10
+          done
+          echo "::error::Smoke test failed -- $SITE_URL never returned 200"
+          exit 1

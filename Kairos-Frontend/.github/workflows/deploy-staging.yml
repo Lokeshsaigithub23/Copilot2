@@ -1,0 +1,75 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-frontend-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FIREBASE_PROJECT: ai-communication-copilot-7f9c0
+  SITE_URL: https://app.myinterviewcopilot.com
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy to Firebase Hosting
+    runs-on: ubuntu-latest
+    environment: kairos-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      # Vite inlines VITE_* at build time, so the API URL and Firebase project
+      # are baked into the bundle here, not at runtime. --mode staging selects
+      # .env.staging; the default mode would pick up .env.production and ship
+      # production config to the staging site.
+      - name: Build
+        run: npx vite build --mode staging
+
+      - name: Verify the bundle is wired to the right backend
+        run: |
+          set -euo pipefail
+          grep -rq 'https://copilotiq-api.myinterviewcopilot.com' dist/assets/*.js \
+            || { echo "::error::API URL missing from bundle"; exit 1; }
+          grep -rq 'ai-communication-copilot-7f9c0' dist/assets/*.js \
+            || { echo "::error::Firebase project missing from bundle -- Google sign-in would 401"; exit 1; }
+          echo "Bundle verified."
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT }}
+          channelId: live
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$SITE_URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Smoke test passed ($SITE_URL -> 200)"
+              exit 0
+            fi
+            echo "attempt $i: $SITE_URL -> $CODE"
+            sleep 10
+          done
+          echo "::error::Smoke test failed -- $SITE_URL never returned 200"
+          exit 1

@@ -1,0 +1,862 @@
+[
+  {
+    "id": "session-1787525979974",
+    "userId": "dummy-user-id",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-23T22:59:39.974Z",
+    "title": "hi",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "hi"
+      },
+      {
+        "sender": "ai",
+        "text": "Hi! How's it going? 😊"
+      }
+    ]
+  },
+  {
+    "id": "session-1787526046212",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-23T23:00:46.212Z",
+    "title": "hi",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "hi"
+      },
+      {
+        "sender": "ai",
+        "text": "Hi! Hi! 😊  \nWhat's up?"
+      },
+      {
+        "sender": "user",
+        "text": "what is python"
+      },
+      {
+        "sender": "ai",
+        "text": "**Python** is a popular programming language used for writing code to create software, websites, automate tasks, analyze data, and much more.\n\n### Simple Explanation:\n\n- **Python** is a high-level, easy-to-read programming language.\n- It was created by **Guido van Rossum** and first released in 1991.\n- It is known for being **beginner-friendly** because its syntax (the way you write code) is very clean and close to English.\n\n### What is Python used for?\n\nHere are the most common uses:\n\n- **Web Development** (using Django, Flask)\n- **Data Science & Machine Learning** (very popular here)\n- **Artificial Intelligence (AI)**\n- **Automation** (writing scripts to do repetitive tasks)\n- **Data Analysis** (using libraries like Pandas, NumPy)\n- **Game Development**\n- **Scientific Computing**\n- **Cybersecurity**\n- **Desktop Applications**\n\n### Example of simple Python code:\n\n```python\nprint(\"Hello, World!\")\nname = \"Alex\"\nprint(\"My name is\", name)\n```\n\n### Why people love Python:\n- Very easy to learn\n- Huge community and support\n- Thousands of free libraries (tools)\n- Works on Windows, Mac, and Linux\n- Excellent for beginners and professionals\n\nWould you like me to explain anything specific about Python? (like how to install it, basic syntax, or what you can build with it?)"
+      },
+      {
+        "sender": "user",
+        "text": "what is list in python"
+      },
+      {
+        "sender": "ai",
+        "text": "**What is a List in Python?**\n\nA **list** is one of the most commonly used data structures in Python. It is used to store multiple items in a single variable.\n\n### Simple Definition:\nA list is an **ordered**, **changeable**, and **allow duplicate** collection of items.\n\n### Key Features of a List:\n\n| Feature          | Description                          |\n|------------------|--------------------------------------|\n| Ordered          | Items have a defined order           |\n| Changeable       | You can add, remove, or modify items |\n| Allows Duplicates| Same value can appear multiple times |\n| Mixed Data Types | Can store integers, strings, floats, etc. |\n\n---\n\n### How to Create a List\n\n```python\n# Examples of lists\nfruits = [\"apple\", \"banana\", \"cherry\"]\nnumbers = [10, 20, 30, 40]\nmixed = [\"hello\", 25, 3.14, True]\n\n# Empty list\nempty = []\n```\n\n---\n\n### Basic Operations on Lists\n\n```python\nfruits = [\"apple\", \"banana\", \"cherry\", \"mango\"]\n\n# 1. Access items (index starts from 0)\nprint(fruits[0])      # Output: apple\nprint(fruits[2])      # Output: cherry\nprint(fruits[-1])     # Output: mango (last item)\n\n# 2. Change an item\nfruits[1] = \"orange\"\n\n# 3. Add items\nfruits.append(\"grapes\")        # adds at the end\nfruits.insert(1, \"kiwi\")       # adds at specific position\n\n# 4. Remove items\nfruits.remove(\"banana\")        # remove by value\nfruits.pop(2)                  # remove by index\ndel fruits[0]                  # delete using index\n```\n\n---\n\n### Useful List Functions\n\n- `len(fruits)` → returns number of items\n- `fruits.sort()` → sorts the list\n- `fruits.reverse()` → reverses the list\n- `fruits.clear()` → removes all items\n\n---\n\nWould you like me to show you:\n- List slicing (very important)\n- Looping through lists\n- List comprehension (advanced but very useful)\n\nJust tell me what you want to learn next about lists!"
+      }
+    ]
+  },
+  {
+    "id": "session-1787526223769",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-23T23:03:43.769Z",
+    "title": "can you explain me about java",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "can you explain me about java"
+      },
+      {
+        "sender": "ai",
+        "text": "**Yes, I'd be happy to explain Java to you!**  \n\n### What is Java?\n\n**Java** is a popular, high-level, object-oriented programming language. It was created by **James Gosling** and his team at Sun Microsystems in 1995 (now owned by Oracle).\n\nJava's main slogan is:  \n**\"Write Once, Run Anywhere\" (WORA)**\n\nThis means you can write Java code once, and it can run on almost any device (Windows, Linux, macOS, Android, etc.) without changing the code.\n\n---\n\n### Key Features of Java\n\n| Feature              | Explanation |\n|----------------------|-----------|\n| **Object-Oriented**  | Everything is based on classes and objects |\n| **Platform Independent** | Runs on any device with a JVM |\n| **Simple**           | Easy to learn compared to C++ |\n| **Secure**           | Has many built-in security features |\n| **Robust**           | Strong memory management and exception handling |\n| **Multithreaded**    | Can run multiple tasks at the same time |\n| **High Performance** | Uses Just-In-Time (JIT) compiler |\n\n---\n\n### How Java Works (Simple Explanation)\n\n1. You write code in `.java` files (Human readable code)\n2. The **Java Compiler** converts it into **Bytecode** (`.class` file)\n3. The **Java Virtual Machine (JVM)** converts that bytecode into machine code for your specific computer\n4. That's why Java can run anywhere — every operating system just needs its own JVM\n\n---\n\n### Main Uses of Java (2025)\n\n- **Backend Development** (very popular with Spring Boot)\n- Android App Development\n- Desktop Applications\n- Enterprise Applications (Banks, Governments, Big Companies)\n- Cloud Computing (AWS, Azure, etc.)\n- Big Data (Hadoop, Spark)\n- Web Development\n- Game Development (Minecraft was originally written in Java)\n\n---\n\n### Basic \"Hello World\" in Java\n\n```java\npublic class HelloWorld {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}\n```\n\n---\n\n### Would you like me to explain any specific topic in more detail?\n\nI can explain any of these based on your level:\n\n- Java for complete beginners\n- Object-Oriented Programming (OOP) in Java\n- Variables, Data Types, Loops, Conditions\n- Classes and Objects\n- Spring Boot (most popular now)\n- Java 17 / Java 21 new features\n- How Java compares with Python, C++, or JavaScript\n\nJust tell me:\n**What do you want to learn about Java?**  \n(Your current level would help — beginner, intermediate, or advanced?)"
+      }
+    ]
+  },
+  {
+    "id": "session-1787639422029",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-25T06:30:22.029Z",
+    "title": "what are you here for",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "what are you here for"
+      },
+      {
+        "sender": "ai",
+        "text": "I'm here to help you with whatever you need.\n\nWhether it's answering questions, explaining things, giving advice, brainstorming ideas, coding, writing, problem-solving, or just having a casual chat — I'm down for it.\n\nSo... what do you want to do?"
+      }
+    ]
+  },
+  {
+    "id": "session-1787641611755",
+    "fileName": "interview_audio_1787528224944.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\NavSharp2\\NavSharp2\\backend\\uploads\\upload-1787641606479-685050597.webm",
+    "transcript": "What is Python? What is Python? What is Java? Difference between Python and Java. What is Python?",
+    "createdAt": "2026-08-25T07:06:51.755Z",
+    "title": "interview_audio_1787528224944....",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "Uploaded and analyzed file: interview_audio_1787528224944.webm"
+      },
+      {
+        "sender": "ai",
+        "text": "**Summary of the Audio File:**\n\nThe audio file is extremely short and repetitive. It consists of a single voice repeatedly asking the same few questions in quick succession.\n\n**Content:**\n\nThe speaker asks the following questions multiple times:\n\n- What is Python?\n- What is Java?\n- Difference between Python and Java.\n\nThe entire transcript is just these three questions being repeated. There is no actual explanation, definition, or discussion provided about Python, Java, or their differences. The file sounds like it may be a test recording, a voice prompt, or possibly the beginning of a larger video that was cut off.\n\nIn short, the audio does not contain any educational content or answers — it only poses the questions \"What is Python?\", \"What is Java?\", and \"Difference between Python and Java\" over and over."
+      }
+    ]
+  },
+  {
+    "id": "session-1787657448628",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-25T11:30:48.628Z",
+    "title": "hi this is sathvik",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "hi this is sathvik"
+      },
+      {
+        "sender": "ai",
+        "text": "Hi Sathvik! 👋  \nNice to meet you. What's up?"
+      },
+      {
+        "sender": "user",
+        "text": "Hello, this is Satsuit. So, I will give you a file Can you change that language into the targeted language, which I kept means translate the audio and can you give me in Telugu?"
+      },
+      {
+        "sender": "ai",
+        "text": "Hello Sathvik,\n\nYes, I can help you with that.\n\nPlease send me the file (audio or video) that you want to translate.\n\nOnce I receive it, I will:\n- Translate the audio into Telugu\n- Give you the Telugu version (either as text subtitles or as a translated audio file, depending on what you need)\n\nJust upload the file now and tell me:\n1. Is it an audio file or a video file?\n2. Do you want only Telugu subtitles, or do you want a full dubbed Telugu audio?\n\nWaiting for your file..."
+      }
+    ]
+  },
+  {
+    "id": "session-1787657560772",
+    "fileName": "interview_audio_1787528224944.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\NavSharp2\\NavSharp2\\backend\\uploads\\upload-1787657553918-691155402.webm",
+    "transcript": "What is Python? What is Python? What is Java? Difference between Python and Java. What is Python?",
+    "createdAt": "2026-08-25T11:32:40.772Z",
+    "title": "interview_audio_1787528224944....",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "transilate the audio in telugu and give me",
+        "attachedFile": {
+          "name": "interview_audio_1787528224944.webm",
+          "url": "/uploads/upload-1787657553918-691155402.webm"
+        }
+      },
+      {
+        "sender": "ai",
+        "text": "Here's the Telugu translation of the audio transcript:\n\n**తెలుగు అనువాదం:**\n\nపైథాన్ అంటే ఏమిటి? పైథాన్ అంటే ఏమిటి? జావా అంటే ఏమిటి? పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి? పైథాన్ అంటే ఏమిటి?\n\n(ఈ ఆడియోలో ఒక వ్యక్తి పైథాన్ గురించి పదేపదే అడుగుతూ, జావా గురించి మరియు రెండింటి మధ్య తేడా గురించి కూడా అడుగుతున్నారు.)",
+        "audioUrl": "/uploads/upload-1787657553918-691155402.webm"
+      },
+      {
+        "sender": "user",
+        "text": "Hi. I'm Jatic. Yeah. Can you explain me about Python?"
+      },
+      {
+        "sender": "ai",
+        "text": "Here's the Telugu translation of your new audio:\n\n**తెలుగు అనువాదం:**\n\nహాయ్. నేను జాతిక్. అవును. పైథాన్ గురించి నాకు వివరంగా చెప్పగలరా?\n\n---\n\nThis is a clean and natural translation in Telugu. The person is introducing himself as Jatic and politely asking for an explanation about Python."
+      }
+    ]
+  },
+  {
+    "id": "session-1787660719343",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-25T12:25:19.343Z",
+    "title": "what is python",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "what is python"
+      },
+      {
+        "sender": "ai",
+        "text": "**Python** is a popular, easy-to-learn programming language used for many different purposes.\n\n### Simple Definition:\nPython is a high-level, interpreted programming language known for its **clean and readable code**. It was created by Guido van Rossum and first released in 1991.\n\n### Key Features:\n- Very beginner-friendly (reads almost like English)\n- Free and open-source\n- Huge community and libraries\n- Cross-platform (works on Windows, Mac, Linux)\n- Supports multiple programming styles (object-oriented, functional, procedural)\n\n### What is Python used for?\n- **Web Development** (Django, Flask, FastAPI)\n- **Data Science & Analytics** (Pandas, NumPy)\n- **Machine Learning & AI** (TensorFlow, PyTorch, Scikit-learn)\n- **Automation & Scripting** (writing scripts to automate boring tasks)\n- **Game Development**\n- **Cybersecurity & Ethical Hacking**\n- **Scientific Computing**\n- **DevOps & Cloud** (Ansible, AWS, etc.)\n\n### Example of simple Python code:\n```python\nprint(\"Hello, World!\")\n\nname = \"Alex\"\nage = 25\nprint(f\"My name is {name} and I'm {age} years old.\")\n```\n\nWould you like me to explain:\n1. How to install Python, or\n2. The basics for complete beginners?\n\nJust tell me your level (total beginner, some experience, etc.) and what you want to do with Python."
+      },
+      {
+        "sender": "user",
+        "text": "what is java"
+      },
+      {
+        "sender": "ai",
+        "text": "**Java** is a popular, powerful, and widely used programming language.\n\n### Simple Definition:\nJava is a high-level, object-oriented programming language that is designed to be **platform-independent** (\"Write Once, Run Anywhere\"). It was created by James Gosling and his team at Sun Microsystems and released in 1995.\n\n### Key Features:\n- **Platform Independent** – Java code runs on any device that has a Java Virtual Machine (JVM)\n- Strongly typed and object-oriented\n- Very secure and robust\n- Excellent performance\n- Huge ecosystem of libraries and frameworks\n- Excellent for large-scale applications\n\n### What is Java used for?\n- **Enterprise Applications** (Banking, Insurance, Government systems)\n- **Android App Development**\n- **Web Development** (using Spring Boot, Jakarta EE)\n- **Big Data** (Hadoop, Spark)\n- **Cloud Computing** (AWS, Azure, Google Cloud)\n- **Desktop Applications**\n- **Microservices**\n- **Game Development** (especially Minecraft)\n\n### Simple Java Example:\n```java\npublic class HelloWorld {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n\n        String name = \"Alex\";\n        int age = 25;\n        System.out.println(\"My name is \" + name + \" and I'm \" + age + \" years old.\");\n    }\n}\n```\n\n### Java vs Python (Quick Comparison):\n\n| Feature           | Java                  | Python                  |\n|-------------------|-----------------------|-------------------------|\n| Difficulty        | Steeper learning curve| Very beginner-friendly  |\n| Typing            | Statically typed      | Dynamically typed       |\n| Speed             | Generally faster      | Slower                  |\n| Code Length       | More code needed      | Much less code          |\n| Best For          | Large systems, Android| Data, AI, automation    |\n\n---\n\nWould you like me to explain:\n1. How to install Java and set it up, or\n2. Java basics for complete beginners?\n\nJust tell me your current level or what you want to do with Java."
+      }
+    ]
+  },
+  {
+    "id": "session-1787660799840",
+    "fileName": "interview_audio_1787528224944.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\NavSharp2\\NavSharp2\\backend\\uploads\\upload-1787660795128-803620161.webm",
+    "transcript": "What is Python? What is Python? What is Java? Difference between Python and Java. What is Python?",
+    "createdAt": "2026-08-25T12:26:39.840Z",
+    "title": "interview_audio_1787528224944....",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "translate the audio file to telugu language",
+        "attachedFile": {
+          "name": "interview_audio_1787528224944.webm",
+          "url": "/uploads/upload-1787660795128-803620161.webm"
+        }
+      },
+      {
+        "sender": "ai",
+        "text": "Here is the translation of the audio file into Telugu language:\n\nపైథాన్ అంటే ఏమిటి? పైథాన్ అంటే ఏమిటి? జావా అంటే ఏమిటి? పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి? పైథాన్ అంటే ఏమిటి?",
+        "audioUrl": "/uploads/upload-1787660795128-803620161.webm"
+      }
+    ]
+  },
+  {
+    "id": "session-1787664011700",
+    "fileName": "interview_audio_1787528224944.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\NavSharp2\\NavSharp2\\backend\\uploads\\upload-1787664002389-737431720.webm",
+    "transcript": "What is Python? What is Python? What is Java? Difference between Python and Java. What is Python?",
+    "createdAt": "2026-08-25T13:20:11.700Z",
+    "title": "interview_audio_1787528224944....",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "transilate this in hindi",
+        "attachedFile": {
+          "name": "interview_audio_1787528224944.webm",
+          "url": "/uploads/upload-1787664002389-737431720.webm"
+        }
+      },
+      {
+        "sender": "ai",
+        "text": "यह पाइथन क्या है? यह पाइथन क्या है? यह जावा क्या है? पाइथन और जावा में अंतर। यह पाइथन क्या है?",
+        "audioUrl": "/uploads/upload-1787664002389-737431720.webm"
+      },
+      {
+        "sender": "user",
+        "text": "what is python"
+      },
+      {
+        "sender": "ai",
+        "text": "**Python** is a high-level, easy-to-learn programming language. It is widely used for web development, data analysis, artificial intelligence, automation, scientific computing, and more.\n\n### Key Features of Python:\n- Simple and readable syntax (easy for beginners)\n- Interpreted language (no need to compile)\n- Huge collection of libraries and frameworks\n- Supports object-oriented, functional, and procedural programming\n- Very popular in Data Science, Machine Learning, and AI\n\nIn short: Python is a versatile and beginner-friendly programming language used to build almost anything from simple scripts to complex applications.\n\nWould you like the answer in Hindi as well?"
+      }
+    ]
+  },
+  {
+    "id": "session-1787665059824",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-25T13:37:39.824Z",
+    "title": "Hello?",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "Hello?"
+      },
+      {
+        "sender": "ai",
+        "text": "Hello! How can I help you today?"
+      }
+    ]
+  },
+  {
+    "id": "session-1787686254179",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-25T19:30:54.179Z",
+    "title": "Hello? Hello? Hello? Hi. How a...",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "Hello? Hello? Hello? Hi. How are you? Is it working?"
+      },
+      {
+        "sender": "ai",
+        "text": "Hey! Hi there 😊  \n\nYes, it's working perfectly!  \n\nI'm doing great, thanks. How about you? What's up?"
+      }
+    ]
+  },
+  {
+    "id": "session-1787775847817",
+    "fileName": "General Chat",
+    "filePath": null,
+    "transcript": "",
+    "createdAt": "2026-08-26T20:24:07.817Z",
+    "title": "Hello",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "Hello"
+      },
+      {
+        "sender": "ai",
+        "text": "Hello! How can I help you today?"
+      },
+      {
+        "sender": "user",
+        "text": "hi"
+      },
+      {
+        "sender": "ai",
+        "text": "Hi! What's up? 😊"
+      }
+    ]
+  },
+  {
+    "id": "session-1789103348984",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1786515799524.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\kairos-backend\\uploads\\upload-1789103342695-395977230.webm",
+    "fileUrl": "/uploads/upload-1789103342695-395977230.webm",
+    "fileSize": 1253011,
+    "duration": "1:17",
+    "durationSeconds": 77.76,
+    "speakersCount": 2,
+    "transcript": "Now you can ask a question. Okay. So, what could be the weather to do? Does that take within letters as we go? Yeah. What are the limitations of React? Like, your voice is not audible, so it's taking from Yeah. I understand. Okay. Someone please ask him. Yeah. Okay. What is Python? What is Java? It's on... What is MongoDB? And, also, if I stop",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:00",
+        "start": 0,
+        "end": 1.22,
+        "text": "Now you can ask a question."
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:08",
+        "start": 8.96,
+        "end": 9.94,
+        "text": "Okay. So,"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:10",
+        "start": 10.24,
+        "end": 11.94,
+        "text": "what could be the weather to do?"
+      },
+      {
+        "id": 4,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.715,
+        "end": 23.335,
+        "text": "Does that take within letters as we go? Yeah."
+      },
+      {
+        "id": 5,
+        "speaker": "Speaker 1",
+        "timecode": "0:28",
+        "start": 28.74,
+        "end": 30.52,
+        "text": "What are the limitations of React?"
+      },
+      {
+        "id": 6,
+        "speaker": "Speaker 1",
+        "timecode": "0:36",
+        "start": 36.98,
+        "end": 40.84,
+        "text": "Like, your voice is not audible, so it's taking from Yeah. I understand."
+      },
+      {
+        "id": 7,
+        "speaker": "Speaker 1",
+        "timecode": "0:41",
+        "start": 41.54,
+        "end": 42.04,
+        "text": "Okay."
+      },
+      {
+        "id": 8,
+        "speaker": "Speaker 1",
+        "timecode": "0:44",
+        "start": 44.234997,
+        "end": 45.855,
+        "text": "Someone please ask him. Yeah."
+      },
+      {
+        "id": 9,
+        "speaker": "Speaker 2",
+        "timecode": "0:50",
+        "start": 50.155,
+        "end": 51.534996,
+        "text": "Okay. What is Python?"
+      },
+      {
+        "id": 10,
+        "speaker": "Speaker 2",
+        "timecode": "0:55",
+        "start": 55.320004,
+        "end": 56.54,
+        "text": "What is Java?"
+      },
+      {
+        "id": 11,
+        "speaker": "Speaker 1",
+        "timecode": "0:56",
+        "start": 56.840004,
+        "end": 58.140003,
+        "text": "It's on..."
+      },
+      {
+        "id": 12,
+        "speaker": "Speaker 2",
+        "timecode": "1:01",
+        "start": 61.4,
+        "end": 62.460003,
+        "text": "What is MongoDB?"
+      },
+      {
+        "id": 13,
+        "speaker": "Speaker 1",
+        "timecode": "1:15",
+        "start": 75.965,
+        "end": 77.66499,
+        "text": "And, also, if I stop"
+      }
+    ],
+    "translations": {},
+    "createdAt": "2026-09-11T05:09:08.984Z",
+    "title": "interview_audio_1786515799524....",
+    "messages": [
+      {
+        "sender": "user",
+        "text": "",
+        "attachedFile": {
+          "name": "interview_audio_1786515799524.webm",
+          "url": "/uploads/upload-1789103342695-395977230.webm"
+        }
+      },
+      {
+        "sender": "ai",
+        "text": "Summary of the Audio File:\n\nThe audio file is a very short, low-quality, and chaotic recording of what appears to be an online meeting or classroom session, likely an interview preparation or technical screening session.\n\nWhat is discussed:\n\nThe session is extremely disorganized. Multiple people are speaking at the same time, and the audio quality is poor with frequent interruptions. The main activity seems to be a group of people (possibly students or candidates) taking turns asking each other basic technical interview questions.\n\nSpecific questions heard in the transcript include:\n- What could be the weather to do? (possibly a misheard or poorly phrased question)\n- What are the limitations of React?\n- What is Python?\n- What is Java?\n- What is MongoDB?\n\nThere are also several side comments such as:\n- \"Your voice is not audible\"\n- \"It's taking from...\"\n- \"Someone please ask him\"\n- \"Okay. I understand.\"\n\nThe recording ends abruptly with the phrase \"And, also, if I stop\".\n\nOverall Context:\n\nThis sounds like a practice session where participants are drilling each other on fundamental technical concepts (React, Python, Java, MongoDB). However, the session is poorly moderated, with overlapping speech, audio issues, and lack of clear structure. It gives the impression of a disorganized mock interview or study group rather than a formal class or meeting.",
+        "audioUrl": "/uploads/upload-1789103342695-395977230.webm"
+      }
+    ]
+  },
+  {
+    "id": "session-1789648759547-mxkv2y",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1788609361330.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\Kairos-Backend\\uploads\\upload-1789648759530-249717410.webm",
+    "fileUrl": "/api/upload/file/upload-1789648759530-249717410.webm",
+    "fileSize": 976765,
+    "duration": "1:00",
+    "durationSeconds": 60.6,
+    "speakersCount": 1,
+    "transcript": "What is Python? What is Java? What is difference between Python and Java?",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:04",
+        "start": 4.88,
+        "end": 5.94,
+        "text": "What is Python?"
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:11",
+        "start": 11.12,
+        "end": 12.179999,
+        "text": "What is Java?"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.335,
+        "end": 21.675,
+        "text": "What is difference between Python and Java?"
+      }
+    ],
+    "translations": {
+      "Telugu": {
+        "translatedText": "పైథాన్ అంటే ఏమిటి? జావా అంటే ఏమిటి? పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?",
+        "translatedUtterances": [
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:04",
+            "start": 4.88,
+            "end": 5.94,
+            "text": "పైథాన్ అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:11",
+            "start": 11.12,
+            "end": 12.179999,
+            "text": "జావా అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:19",
+            "start": 19.335,
+            "end": 21.675,
+            "text": "పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?"
+          }
+        ]
+      }
+    },
+    "createdAt": "2026-09-17T12:39:19.547Z",
+    "title": "interview_audio_1788609361330....",
+    "messages": [
+      {
+        "sender": "ai",
+        "text": "Audio uploaded and ready to transcribe.",
+        "audioUrl": "/api/upload/file/upload-1789648759530-249717410.webm"
+      }
+    ],
+    "isTranscribing": false
+  },
+  {
+    "id": "session-1789654611369-yfi12a",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1788609361330.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\Kairos-Backend\\uploads\\upload-1789654611353-343865510.webm",
+    "fileUrl": "/api/upload/file/upload-1789654611353-343865510.webm",
+    "fileSize": 976765,
+    "duration": "1:00",
+    "durationSeconds": 60.6,
+    "speakersCount": 1,
+    "transcript": "What is Python? What is Java? What is difference between Python and Java?",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:04",
+        "start": 4.88,
+        "end": 5.94,
+        "text": "What is Python?"
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:11",
+        "start": 11.12,
+        "end": 12.179999,
+        "text": "What is Java?"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.335,
+        "end": 21.675,
+        "text": "What is difference between Python and Java?"
+      }
+    ],
+    "translations": {},
+    "createdAt": "2026-09-17T14:16:51.369Z",
+    "title": "interview_audio_1788609361330....",
+    "messages": [
+      {
+        "sender": "ai",
+        "text": "Audio uploaded and ready to transcribe.",
+        "audioUrl": "/api/upload/file/upload-1789654611353-343865510.webm"
+      }
+    ],
+    "isTranscribing": false
+  },
+  {
+    "id": "session-1789657949969-te33rm",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1788609361330.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\Kairos-Backend\\uploads\\upload-1789657949953-500010824.webm",
+    "fileUrl": "/api/upload/file/upload-1789657949953-500010824.webm",
+    "fileSize": 976765,
+    "duration": "1:00",
+    "durationSeconds": 60.6,
+    "speakersCount": 1,
+    "transcript": "What is Python? What is Java? What is difference between Python and Java?",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:04",
+        "start": 4.88,
+        "end": 5.94,
+        "text": "What is Python?"
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:11",
+        "start": 11.12,
+        "end": 12.179999,
+        "text": "What is Java?"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.335,
+        "end": 21.675,
+        "text": "What is difference between Python and Java?"
+      }
+    ],
+    "translations": {
+      "Telugu": {
+        "translatedText": "పైథాన్ అంటే ఏమిటి? జావా అంటే ఏమిటి? పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?",
+        "translatedUtterances": [
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:04",
+            "start": 4.88,
+            "end": 5.94,
+            "text": "పైథాన్ అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:11",
+            "start": 11.12,
+            "end": 12.179999,
+            "text": "జావా అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:19",
+            "start": 19.335,
+            "end": 21.675,
+            "text": "పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?"
+          }
+        ]
+      }
+    },
+    "createdAt": "2026-09-17T15:12:29.969Z",
+    "title": "interview_audio_1788609361330....",
+    "messages": [
+      {
+        "sender": "ai",
+        "text": "Audio uploaded and ready to transcribe.",
+        "audioUrl": "/api/upload/file/upload-1789657949953-500010824.webm"
+      },
+      {
+        "sender": "user",
+        "text": "give me the summary of the audio in 2 bullet points"
+      },
+      {
+        "sender": "ai",
+        "text": "- The audio poses three basic questions about programming languages: What is Python, what is Java, and what are the key differences between them.\n- It appears to be an interview-style recording focused on comparing Python and Java."
+      }
+    ],
+    "isTranscribing": false
+  },
+  {
+    "id": "session-1789658331618-li5l9l",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1788609361330.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\Kairos-Backend\\uploads\\upload-1789658331611-922010897.webm",
+    "fileUrl": "/api/upload/file/upload-1789658331611-922010897.webm",
+    "fileSize": 976765,
+    "duration": "1:00",
+    "durationSeconds": 60.6,
+    "speakersCount": 1,
+    "transcript": "What is Python? What is Java? What is difference between Python and Java?",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:04",
+        "start": 4.88,
+        "end": 5.94,
+        "text": "What is Python?"
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:11",
+        "start": 11.12,
+        "end": 12.179999,
+        "text": "What is Java?"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.335,
+        "end": 21.675,
+        "text": "What is difference between Python and Java?"
+      }
+    ],
+    "translations": {},
+    "createdAt": "2026-09-17T15:18:51.618Z",
+    "title": "interview_audio_1788609361330....",
+    "messages": [
+      {
+        "sender": "ai",
+        "text": "Audio uploaded and ready to transcribe.",
+        "audioUrl": "/api/upload/file/upload-1789658331611-922010897.webm"
+      }
+    ],
+    "isTranscribing": false
+  },
+  {
+    "id": "session-1789740787414-yuy8a9",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1788609361330.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\Kairos-Backend\\uploads\\upload-1789740787389-324413554.webm",
+    "fileUrl": "/api/upload/file/upload-1789740787389-324413554.webm",
+    "fileSize": 976765,
+    "duration": "1:00",
+    "durationSeconds": 60.6,
+    "speakersCount": 1,
+    "transcript": "What is Python? What is Java? What is difference between Python and Java?",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:04",
+        "start": 4.88,
+        "end": 5.94,
+        "text": "What is Python?"
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:11",
+        "start": 11.12,
+        "end": 12.179999,
+        "text": "What is Java?"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.335,
+        "end": 21.675,
+        "text": "What is difference between Python and Java?"
+      }
+    ],
+    "translations": {
+      "Telugu": {
+        "translatedText": "పైథాన్ అంటే ఏమిటి? జావా అంటే ఏమిటి? పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?",
+        "translatedUtterances": [
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:04",
+            "start": 4.88,
+            "end": 5.94,
+            "text": "పైథాన్ అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:11",
+            "start": 11.12,
+            "end": 12.179999,
+            "text": "జావా అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:19",
+            "start": 19.335,
+            "end": 21.675,
+            "text": "పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?"
+          }
+        ]
+      }
+    },
+    "createdAt": "2026-09-18T14:13:07.414Z",
+    "title": "interview_audio_1788609361330....",
+    "messages": [
+      {
+        "sender": "ai",
+        "text": "Audio uploaded and ready to transcribe.",
+        "audioUrl": "/api/upload/file/upload-1789740787389-324413554.webm"
+      }
+    ],
+    "isTranscribing": false
+  },
+  {
+    "id": "session-1789745553220-cg1vta",
+    "userId": "cmt3hnvr9000xv8ngi7oe6jss",
+    "fileName": "interview_audio_1788609361330.webm",
+    "filePath": "C:\\Users\\user\\Downloads\\AppKairos\\Kairos-Backend\\uploads\\upload-1789745553188-973830901.webm",
+    "fileUrl": "/api/upload/file/upload-1789745553188-973830901.webm",
+    "fileSize": 976765,
+    "duration": "1:00",
+    "durationSeconds": 60.6,
+    "speakersCount": 1,
+    "transcript": "What is Python? What is Java? What is difference between Python and Java?",
+    "utterances": [
+      {
+        "id": 1,
+        "speaker": "Speaker 1",
+        "timecode": "0:04",
+        "start": 4.88,
+        "end": 5.94,
+        "text": "What is Python?"
+      },
+      {
+        "id": 2,
+        "speaker": "Speaker 1",
+        "timecode": "0:11",
+        "start": 11.12,
+        "end": 12.179999,
+        "text": "What is Java?"
+      },
+      {
+        "id": 3,
+        "speaker": "Speaker 1",
+        "timecode": "0:19",
+        "start": 19.335,
+        "end": 21.675,
+        "text": "What is difference between Python and Java?"
+      }
+    ],
+    "translations": {
+      "Telugu": {
+        "translatedText": "పైథాన్ అంటే ఏమిటి? జావా అంటే ఏమిటి? పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?",
+        "translatedUtterances": [
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:04",
+            "start": 4.88,
+            "end": 5.94,
+            "text": "పైథాన్ అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:11",
+            "start": 11.12,
+            "end": 12.179999,
+            "text": "జావా అంటే ఏమిటి?"
+          },
+          {
+            "speaker": "Speaker 1",
+            "timecode": "0:19",
+            "start": 19.335,
+            "end": 21.675,
+            "text": "పైథాన్ మరియు జావా మధ్య తేడా ఏమిటి?"
+          }
+        ]
+      }
+    },
+    "createdAt": "2026-09-18T15:32:33.220Z",
+    "title": "interview_audio_1788609361330....",
+    "messages": [
+      {
+        "sender": "ai",
+        "text": "Audio uploaded and ready to transcribe.",
+        "audioUrl": "/api/upload/file/upload-1789745553188-973830901.webm"
+      },
+      {
+        "sender": "user",
+        "text": "what is the summary of the auido"
+      },
+      {
+        "sender": "ai",
+        "text": "The audio is a short interview-style clip that asks three basic questions:\n\n- What is Python?\n- What is Java?\n- What is the difference between Python and Java?\n\nThat's the complete content of the audio. There are no answers or explanations provided in the recording, just the three questions being asked."
+      }
+    ],
+    "isTranscribing": false
+  }
+]

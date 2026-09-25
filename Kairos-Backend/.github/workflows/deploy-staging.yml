@@ -1,0 +1,160 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two deploys race for the same service.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC federation into AWS
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: kairos-api
+  ECS_CLUSTER: cluster-copilotiq-staging
+  ECS_SERVICE: service-copilotiq-staging-app
+  CONTAINER_NAME: copilotiq-api-staging
+  HEALTHCHECK_URL: https://copilotiq-api.myinterviewcopilot.com/health/ready
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    # The session-isolation regression tests need a real postgres: the Prisma
+    # schema targets it, and they guard against cross-user data exposure.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kairos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kairos_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kairos_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm test
+
+  deploy:
+    name: Build, migrate and deploy
+    needs: test
+    runs-on: ubuntu-latest
+    environment: kairos-staging   # must match the OIDC role's trust condition
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::974780914474:role/role-kairos-staging-ci
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA}"
+          docker build --platform linux/amd64 -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      # Schema changes are applied once, here -- never by the app containers.
+      # If this fails the deploy stops, so a bad migration can't reach traffic.
+      - name: Render migration task definition
+        id: migrate-td
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: deploy/task-definition-staging-migrate.json
+          container-name: kairos-migrate
+          image: ${{ steps.build.outputs.image }}
+
+      - name: Run database migration
+        run: |
+          set -euo pipefail
+          TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "file://${{ steps.migrate-td.outputs.task-definition }}" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered $TD_ARN"
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$TD_ARN" \
+            --launch-type FARGATE \
+            --network-configuration 'awsvpcConfiguration={subnets=[subnet-09feace831b461fc0,subnet-0f47195c653d412cd],securityGroups=[sg-0835333bdb301e196],assignPublicIp=ENABLED}' \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          REASON=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].stoppedReason' --output text)
+          echo "Migration exit code: $EXIT_CODE ($REASON)"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Database migration failed -- aborting before the service is touched."
+            aws logs tail /aws/kairos/staging/migrate --since 10m || true
+            exit 1
+          fi
+
+      - name: Render app task definition
+        id: app-td
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: deploy/task-definition-staging.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.app-td.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # Must go through HTTPS on the real hostname: the ALB's :80 listener
+      # 301-redirects to :443, and its cert does not cover the raw ALB DNS name.
+      - name: Smoke test through the load balancer
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 15); do
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$HEALTHCHECK_URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Smoke test passed ($HEALTHCHECK_URL -> 200)"
+              exit 0
+            fi
+            echo "attempt $i: $HEALTHCHECK_URL -> $CODE"
+            sleep 10
+          done
+          echo "::error::Smoke test failed -- $HEALTHCHECK_URL never returned 200"
+          exit 1

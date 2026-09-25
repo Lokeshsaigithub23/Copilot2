@@ -1,0 +1,11 @@
+node_modules
+uploads/
+.env
+
+# Build output from the previous TypeScript service; not produced by the
+# current plain-JS app and not part of the deployed image.
+dist/
+.env
+*.log
+data/*.db
+prisma/data/*.db

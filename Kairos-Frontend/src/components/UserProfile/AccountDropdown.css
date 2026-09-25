@@ -1,0 +1,196 @@
+/* ==========================================================================
+   Account Dropdown Menu (Matching Reference)
+   ========================================================================== */
+
+.account-dropdown-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.account-dropdown-arrow {
+  font-size: 9px;
+  margin-left: 3px;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+
+.account-dropdown-arrow.open {
+  transform: rotate(180deg);
+}
+
+.account-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  padding: 6px 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  animation: accountDropdownFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+}
+
+@keyframes accountDropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+body.dark-theme .account-dropdown-menu {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 14px 28px -5px rgba(0, 0, 0, 0.5), 0 10px 12px -6px rgba(0, 0, 0, 0.3);
+}
+
+.account-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+body.dark-theme .account-menu-item {
+  color: #f1f5f9;
+}
+
+.account-menu-item:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+body.dark-theme .account-menu-item:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.account-menu-icon {
+  font-size: 16px;
+  width: 18px;
+  text-align: center;
+  color: #4b5563;
+  flex-shrink: 0;
+}
+
+body.dark-theme .account-menu-icon {
+  color: #94a3b8;
+}
+
+.account-menu-item:hover .account-menu-icon {
+  color: #111827;
+}
+
+body.dark-theme .account-menu-item:hover .account-menu-icon {
+  color: #ffffff;
+}
+
+.account-menu-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
+  width: 100%;
+}
+
+body.dark-theme .account-menu-divider {
+  background: #334155;
+}
+
+/* Logout Item Styling (Matching Reference in Red) */
+.account-menu-item.account-menu-logout {
+  color: #ef4444;
+}
+
+.account-menu-item.account-menu-logout .account-menu-icon {
+  color: #ef4444;
+}
+
+.account-menu-item.account-menu-logout:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}
+
+.account-menu-item.account-menu-logout:hover .account-menu-icon {
+  color: #dc2626;
+}
+
+body.dark-theme .account-menu-item.account-menu-logout {
+  color: #f87171;
+}
+
+body.dark-theme .account-menu-item.account-menu-logout .account-menu-icon {
+  color: #f87171;
+}
+
+body.dark-theme .account-menu-item.account-menu-logout:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+body.dark-theme .account-menu-item.account-menu-logout:hover .account-menu-icon {
+  color: #fca5a5;
+}
+
+/* ==========================================================================
+   Profile Trigger Button (Matching Pill Styling with Initials)
+   ========================================================================== */
+
+.setup-logout-btn.setup-profile-btn {
+  background: #6366f1;
+  color: #ffffff;
+  border: 1px solid #6366f1;
+  padding: 6px 14px;
+  font-weight: 700;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.2);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+}
+
+.setup-logout-btn.setup-profile-btn:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #ffffff;
+}
+
+.setup-profile-initials {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+body.dark-theme .setup-logout-btn.setup-profile-btn {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #6366f1;
+}
+
+body.dark-theme .setup-logout-btn.setup-profile-btn:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+

@@ -1,0 +1,36 @@
+{
+  "family": "task-kairos-production-migrate",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::974780914474:role/role-copilotiq-production-execution-app",
+  "taskRoleArn": "arn:aws:iam::974780914474:role/role-copilotiq-production-task",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "kairos-migrate",
+      "image": "IMAGE_PLACEHOLDER",
+      "essential": true,
+      "command": ["npx", "prisma", "migrate", "deploy"],
+      "environment": [{ "name": "NODE_ENV", "value": "production" }],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/database/app-lqhleq:url::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/aws/kairos/production/migrate",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "migrate"
+        }
+      }
+    }
+  ]
+}

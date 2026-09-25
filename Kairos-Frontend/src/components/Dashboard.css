@@ -1,0 +1,217 @@
+/* ==========================================================================
+   Dashboard Page Layout & Themes
+   ========================================================================== */
+
+.interview-panel-root.dashboard-page-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #ffffff !important;
+  color: #1a1a1a;
+  border: none !important;
+  border-radius: 0px !important;
+  padding-top: 38px !important;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme {
+  background-color: #121214 !important;
+  color: #ececec;
+}
+
+/* ==========================================================================
+   Dashboard Header & Welcome Banner
+   ========================================================================== */
+
+.dashboard-content-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 60px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.dashboard-welcome-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-welcome-banner h1 {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: #0f172a;
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .dashboard-welcome-banner h1 {
+  color: #f8fafc;
+}
+
+.dashboard-welcome-banner p {
+  font-size: 16px;
+  color: #64748b;
+  margin: 0;
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .dashboard-welcome-banner p {
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   4-Card Feature Grid
+   ========================================================================== */
+
+.dashboard-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+  width: 100%;
+}
+
+.dashboard-feature-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .dashboard-feature-card {
+  background-color: #1a1a1e;
+  border-color: #2f2f35;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dashboard-feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .dashboard-feature-card:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Icon Containers */
+.card-icon-container {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+/* Card Styling Classes */
+.copilot-card .card-icon-container {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.notetaker-card .card-icon-container {
+  background-color: rgba(124, 58, 237, 0.1);
+  color: #7c3aed;
+}
+
+.voice-card .card-icon-container {
+  background-color: rgba(6, 182, 212, 0.1);
+  color: #06b6d4;
+}
+
+.upload-card .card-icon-container {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+}
+
+.referral-card .card-icon-container {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+/* Typography & Content */
+.card-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  color: #0f172a;
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .card-title {
+  color: #f8fafc;
+}
+
+.card-description {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+  flex: 1;
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .card-description {
+  color: #cbd5e1;
+}
+
+/* Card Actions */
+.card-action-button {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  background-color: #f1f5f9;
+  color: #334155;
+}
+
+.interview-panel-root.dashboard-page-root.dark-theme .card-action-button {
+  background-color: #2f2f35;
+  color: #e2e8f0;
+}
+
+/* Button Hover Effects */
+.copilot-card .card-action-button:hover {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+.notetaker-card .card-action-button:hover {
+  background-color: #7c3aed;
+  color: #ffffff;
+}
+
+.voice-card .card-action-button:hover {
+  background-color: #06b6d4;
+  color: #ffffff;
+}
+
+.upload-card .card-action-button:hover {
+  background-color: #f97316;
+  color: #ffffff;
+}
+
+.referral-card .card-action-button:hover {
+  background-color: #f59e0b;
+  color: #ffffff;
+}

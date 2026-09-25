@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+data/*.db
+prisma/data
+uploads
+test
+test_session_isolation.js
+*.md
+.DS_Store

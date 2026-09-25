@@ -1,0 +1,361 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String                    @id @default(cuid())
+  email                    String                    @unique
+  password                 String
+  name                     String                    @default("")
+  createdAt                DateTime                  @default(now())
+  emailVerified            Boolean                   @default(false)
+
+  sessions                 Session[]
+  referralProfile          ReferralProfile?
+  creditAccount            CreditAccount?
+  bannedAt                 DateTime?
+  emailVerificationTokens  EmailVerificationToken[]
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+
+model Session {
+  id                 String              @id
+  userId             String
+  tech               String              @default("Interview")
+  title              String              @default("Live Session")
+  durationSeconds    Int                 @default(0)
+  durationDisplay    String              @default("00:00:00")
+  questionCount      Int                 @default(0)
+  rating             Int                 @default(0)
+  payloadJson        String              @default("{}")
+  audioFilePath      String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  auditEvents        AuditEvent[]
+  consents           ConsentRecord[]
+  exports            ExportRecord[]
+  notes              Note[]
+  questions          Question[]
+  recordings         Recording[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transcriptSegments TranscriptSegment[]
+
+  @@index([userId, createdAt])
+}
+
+model Role {
+  id   String @id @default(cuid())
+  name String @unique
+}
+
+model Skill {
+  id   String @id @default(cuid())
+  name String @unique
+}
+
+model TranscriptSegment {
+  id        String   @id @default(cuid())
+  sessionId String
+  source    String   @default("unknown")
+  text      String
+  isFinal   Boolean  @default(true)
+  sequence  Int?
+  startMs   Int?
+  endMs     Int?
+  createdAt DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, sequence])
+}
+
+model Question {
+  id        String     @id @default(cuid())
+  sessionId String
+  segmentId String?
+  text      String
+  createdAt DateTime   @default(now())
+  answers   AIAnswer[]
+  session   Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+
+model AIAnswer {
+  id         String   @id @default(cuid())
+  questionId String
+  provider   String?
+  model      String?
+  text       String
+  createdAt  DateTime @default(now())
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  sessionId String
+  kind      String   @default("ai")
+  language  String?
+  text      String
+  createdAt DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+
+model ConsentRecord {
+  id        String   @id @default(cuid())
+  sessionId String
+  status    String
+  text      String?
+  createdAt DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model Recording {
+  id          String   @id @default(cuid())
+  sessionId   String
+  storageKey  String
+  mimeType    String?
+  sizeBytes   Int?
+  durationSec Int?
+  createdAt   DateTime @default(now())
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model ExportRecord {
+  id        String   @id @default(cuid())
+  sessionId String
+  format    String
+  fileName  String?
+  createdAt DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  sessionId String?
+  actorId   String?
+  action    String
+  metadata  String   @default("{}")
+  createdAt DateTime @default(now())
+  session   Session? @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model ReferralProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  code             String    @unique
+  codeActivatesAt  DateTime
+  vanityChanged    Boolean   @default(false)
+  displayName      String    @default("")
+  leaderboardOptIn Boolean   @default(false)
+  joinedCount      Int       @default(0)
+  qualifiedCount   Int       @default(0)
+  blockedAt        DateTime?
+  blockedReason    String?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([qualifiedCount])
+}
+
+model ReferralCode {
+  id               String    @id @default(cuid())
+  code             String    @unique
+  kind             String
+  ownerUserId      String?
+  campaignId       String?
+  status           String    @default("active")
+  activatesAt      DateTime?
+  expiresAt        DateTime?
+  maxRedemptions   Int?
+  redemptionCount  Int       @default(0)
+  refereeCredits   Int       @default(100)
+  referrerCredits  Int       @default(250)
+  createdByAdminId String?
+  notes            String    @default("")
+  createdAt        DateTime  @default(now())
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id])
+
+  @@index([campaignId, status])
+  @@index([ownerUserId])
+}
+
+model ReferralAttribution {
+  id             String    @id @default(cuid())
+  codeId         String
+  refereeUserId  String    @unique
+  referrerUserId String?
+  campaignId     String?
+  status         String    @default("joined")
+  fraudStatus    String    @default("clean")
+  fraudScore     Int       @default(0)
+  evidenceJson   String    @default("{}")
+  signupIpHash   String?
+  deviceIdHash   String?
+  qualifiedAt    DateTime?
+  rejectedReason String?
+  createdAt      DateTime  @default(now())
+
+  @@index([referrerUserId, status])
+  @@index([campaignId, createdAt])
+  @@index([fraudStatus, createdAt])
+}
+
+model ReferralClick {
+  id         String   @id @default(cuid())
+  codeId     String
+  campaignId String?
+  source     String?
+  ipHash     String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([codeId, createdAt])
+  @@index([campaignId, createdAt])
+}
+
+model CreditAccount {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  availableCredits Int      @default(0)
+  pendingCredits   Int      @default(0)
+  lifetimeEarned   Int      @default(0)
+  version          Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries CreditLedger[]
+}
+
+model CreditLedger {
+  id             String    @id @default(cuid())
+  accountId      String
+  entryType      String
+  delta          Int
+  availableAfter Int
+  pendingAfter   Int
+  idempotencyRef String    @unique
+  refType        String?
+  refId          String?
+  maturesAt      DateTime?
+  expiresAt      DateTime?
+  adminId        String?
+  reason         String?
+  createdAt      DateTime  @default(now())
+
+  account CreditAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+  @@index([entryType, createdAt])
+  @@index([maturesAt])
+}
+
+model ReferralQualification {
+  id                String    @id @default(cuid())
+  attributionId     String    @unique
+  referrerUserId    String
+  awardedCredits    Int
+  ledgerEntryId     String?
+  maturesAt         DateTime
+  reversedAt        DateTime?
+  reversedReason    String?
+  reversedByAdminId String?
+  createdAt         DateTime  @default(now())
+
+  @@index([referrerUserId, createdAt])
+}
+
+model MilestoneDefinition {
+  id           String  @id @default(cuid())
+  threshold    Int     @unique
+  title        String
+  description  String  @default("")
+  unlockKey    String  @unique
+  bonusCredits Int     @default(0)
+  iconKey      String  @default("gift")
+  active       Boolean @default(true)
+  sortOrder    Int     @default(0)
+}
+
+model ReferralMilestone {
+  id            String    @id @default(cuid())
+  userId        String
+  threshold     Int
+  countAtUnlock Int
+  unlockedAt    DateTime  @default(now())
+  revokedAt     DateTime?
+  revokedReason String?
+
+  @@unique([userId, threshold])
+  @@index([userId])
+}
+
+model Campaign {
+  id               String         @id @default(cuid())
+  name             String
+  slug             String         @unique
+  kind             String
+  startsAt         DateTime
+  endsAt           DateTime?
+  budgetCredits    Int?
+  spentCredits     Int            @default(0)
+  status           String         @default("draft")
+  createdByAdminId String
+  createdAt        DateTime       @default(now())
+  codes            ReferralCode[]
+
+  @@index([status, startsAt])
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String    @default("")
+  role         String    @default("viewer")
+  totpSecret   String?
+  lastLoginAt  DateTime?
+  disabledAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  action     String
+  targetType String
+  targetId   String
+  beforeJson String   @default("{}")
+  afterJson  String   @default("{}")
+  reason     String   @default("")
+  ipHash     String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([targetType, targetId])
+}

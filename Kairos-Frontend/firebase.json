@@ -1,0 +1,19 @@
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "headers": [
+      {
+        "//": "Matched against the REQUEST path, not the rewrite target. The app is loaded at '/', so a rule on '/index.html' alone never applied to real traffic and the shell was cached for an hour -- browsers kept running the previous build after every deploy. Default everything to no-cache, then opt the fingerprinted assets back in below.",
+        "source": "**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "//": "Safe to cache forever: Vite fingerprints these filenames, so a new build produces new names.",
+        "source": "/assets/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "family": "task-kairos-production-app",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::974780914474:role/role-copilotiq-production-execution-app",
+  "taskRoleArn": "arn:aws:iam::974780914474:role/role-copilotiq-production-task",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "copilotiq-api-production",
+      "image": "IMAGE_PLACEHOLDER",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 4100,
+          "hostPort": 4100,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "4100"
+        },
+        {
+          "name": "FIREBASE_PROJECT_ID",
+          "value": "copilotiq-prod"
+        },
+        {
+          "name": "FIREBASE_CERTS_URL",
+          "value": "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+        },
+        {
+          "name": "CORS_ORIGIN",
+          "value": "https://myinterviewcopilot.com,https://www.myinterviewcopilot.com"
+        },
+        {
+          "name": "PUBLIC_API_BASE_URL",
+          "value": "https://copilotiq-api.myinterviewcopilot.com"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/database/app-lqhleq:url::"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/auth-EkUFiy:JWT_SECRET::"
+        },
+        {
+          "name": "DEEPGRAM_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/provider-api-keys-3GoAmc:DEEPGRAM_API_KEY::"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/provider-api-keys-3GoAmc:OPENAI_API_KEY::"
+        },
+        {
+          "name": "GROQ_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/provider-api-keys-3GoAmc:GROQ_API_KEY::"
+        },
+        {
+          "name": "GROK_UPLOAD_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:974780914474:secret:/kairos/production/provider-api-keys-3GoAmc:GROK_UPLOAD_API_KEY::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:4100/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/aws/kairos/production/api",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+name: Deploy production
+
+# Manual only. Production is never deployed automatically on push.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'ECR image tag to promote (a commit SHA already built and deployed to staging). Defaults to this ref.'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: kairos-api
+  ECS_CLUSTER: cluster-copilotiq-production
+  ECS_SERVICE: service-copilotiq-production-app
+  CONTAINER_NAME: copilotiq-api-production
+  HEALTHCHECK_URL: https://copilot-api.myinterviewcopilot.com/health
+
+jobs:
+  deploy:
+    name: Promote to production
+    runs-on: ubuntu-latest
+    # Gated by the kairos-production environment; add required reviewers there
+    # to make every production deploy need a human approval.
+    environment: kairos-production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::974780914474:role/role-kairos-production-ci
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Production promotes the exact artifact that was built and verified on
+      # staging -- it never rebuilds. Rebuilding could produce a different image
+      # from the same source, so what ships would not be what was tested.
+      - name: Resolve and verify the image
+        id: image
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.image_tag }}"
+          [ -n "$TAG" ] || TAG="$GITHUB_SHA"
+
+          if ! aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "::error::No image tagged '$TAG' in $ECR_REPOSITORY. Deploy it to staging first so the artifact exists."
+            exit 1
+          fi
+
+          REGISTRY="${{ secrets.AWS_ACCOUNT_ID || '974780914474' }}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "image=$REGISTRY/$ECR_REPOSITORY:$TAG" >> "$GITHUB_OUTPUT"
+          echo "Promoting $REGISTRY/$ECR_REPOSITORY:$TAG"
+
+      - name: Render migration task definition
+        id: migrate-td
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: deploy/task-definition-production-migrate.json
+          container-name: kairos-migrate
+          image: ${{ steps.image.outputs.image }}
+
+      - name: Run database migration
+        run: |
+          set -euo pipefail
+          TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "file://${{ steps.migrate-td.outputs.task-definition }}" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$TD_ARN" \
+            --launch-type FARGATE \
+            --network-configuration 'awsvpcConfiguration={subnets=[subnet-058b39553843f785e,subnet-0e521d962097b4b83],securityGroups=[sg-0e0c088ed5a99c663],assignPublicIp=ENABLED}' \
+            --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "Migration exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Production migration failed -- aborting before the service is touched."
+            aws logs tail /aws/kairos/production/migrate --since 10m || true
+            exit 1
+          fi
+
+      - name: Render app task definition
+        id: app-td
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: deploy/task-definition-production.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.image.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.app-td.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 15); do
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$HEALTHCHECK_URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Smoke test passed ($HEALTHCHECK_URL -> 200)"
+              exit 0
+            fi
+            echo "attempt $i: $HEALTHCHECK_URL -> $CODE"
+            sleep 10
+          done
+          echo "::error::Smoke test failed -- $HEALTHCHECK_URL never returned 200"
+          exit 1
