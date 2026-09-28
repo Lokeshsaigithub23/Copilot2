@@ -46,7 +46,8 @@ function createAuthController({ db, authService,emailVerificationService }) {
           email,
           password,
           name,
-          referralCode
+          referralCode,
+          deviceId
         } = req.body || {};
 
         if (!email || !password) {
@@ -70,7 +71,8 @@ function createAuthController({ db, authService,emailVerificationService }) {
           password,
           name,
           referralCode,
-          req.ip || ''
+          req.ip || '',
+          deviceId
         );
 
         let verificationEmailSent = false;
@@ -112,7 +114,7 @@ function createAuthController({ db, authService,emailVerificationService }) {
     },
 
     login: async (req, res) => {
-      const { email, password } = req.body || {};
+      const { email, password, deviceId } = req.body || {};
       const loginKey = getLoginKey(req, email);
 
       if (isRateLimited(loginKey)) {
@@ -152,6 +154,11 @@ function createAuthController({ db, authService,emailVerificationService }) {
         }
 
         clearFailedLogins(loginKey);
+
+        // Bind this device to the authenticated user.
+        if (deviceId) {
+          await db.bindDeviceToUser(user.id, deviceId);
+        }
 
         res.json(authService.createAuthResponse(user));
       } catch (err) {

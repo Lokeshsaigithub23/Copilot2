@@ -7,6 +7,17 @@ import {
 import AccountDropdown from './UserProfile/AccountDropdown';
 import { API_BASE } from '../utils/api';
 
+function getKairosDeviceId() {
+  let deviceId = localStorage.getItem('kairos_device_id');
+
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem('kairos_device_id', deviceId);
+  }
+
+  return deviceId;
+}
+
 // Electron IPC connection if running under Electron
 const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
 
@@ -106,7 +117,8 @@ export default function LandingPage({ token, user, onLogout,onGoToReferral,onGoT
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idToken,
-          referralCode: referralCode.trim().toUpperCase()
+          referralCode: referralCode.trim().toUpperCase(),
+          deviceId: getKairosDeviceId()
         })
       });
 
@@ -174,7 +186,7 @@ export default function LandingPage({ token, user, onLogout,onGoToReferral,onGoT
         const response = await fetch(`${API_BASE}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailVal, password: passVal }),
+          body: JSON.stringify({ email: emailVal, password: passVal,deviceId: getKairosDeviceId() }),
         });
         
         let payload = null;
@@ -210,7 +222,7 @@ export default function LandingPage({ token, user, onLogout,onGoToReferral,onGoT
         const response = await fetch(`${API_BASE}/api/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailVal, password: passVal, name: nameVal, referralCode: referralCode.trim().toUpperCase() }),
+          body: JSON.stringify({ email: emailVal, password: passVal, name: nameVal, referralCode: referralCode.trim().toUpperCase(),deviceId: getKairosDeviceId() }),
         });
 
         let payload = null;
@@ -227,7 +239,7 @@ export default function LandingPage({ token, user, onLogout,onGoToReferral,onGoT
             const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: emailVal, password: passVal }),
+              body: JSON.stringify({ email: emailVal, password: passVal,deviceId: getKairosDeviceId() }),
             });
             let loginPayload = null;
             try {

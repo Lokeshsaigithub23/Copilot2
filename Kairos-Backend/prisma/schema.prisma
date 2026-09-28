@@ -20,7 +20,23 @@ model User {
   creditAccount            CreditAccount?
   bannedAt                 DateTime?
   emailVerificationTokens  EmailVerificationToken[]
+  devices                  UserDevice[]
 }
+
+model UserDevice {
+  id           String   @id @default(cuid())
+  userId       String
+  deviceIdHash String
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceIdHash])
+  @@index([userId])
+  @@index([deviceIdHash])
+}
+
 
 model EmailVerificationToken {
   id        String   @id @default(cuid())

@@ -24,22 +24,31 @@ function createGoogleAuthHandler(options) {
           req.body?.referralCode || ''
         ).trim();
 
-        try {
-          const referralCode = String(
-            req.body?.referralCode || ''
-          ).trim();
+        const deviceId = String(
+          req.body?.deviceId || ''
+        ).trim();
 
+        try {
           user = await db.createUser(
             email,
             generatePassword(),
             displayName,
             referralCode,
-            req.ip || ''
+            req.ip || '',
+            deviceId
           );
         } catch (createError) {
           // A concurrent first login may have created the same verified email.
           user = await db.getUserByEmail(email);
           if (!user) throw createError;
+        }
+      } else {
+        const deviceId = String(
+          req.body?.deviceId || ''
+        ).trim();
+
+        if (deviceId) {
+          await db.bindDeviceToUser(user.id, deviceId);
         }
       }
 

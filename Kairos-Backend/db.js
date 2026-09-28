@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { spawnSync } = require('child_process');
 const { ensurePrismaEnv } = require('./scripts/prisma-env');
 const { createCreditService } = require('./src/services/credit.service');
-
+const { createDeviceBindingService } =require('./src/services/device-binding.service');
 const databaseUrl = ensurePrismaEnv();
 
 // Ensure the local dev schema exists before connecting. Never do this in
@@ -24,6 +24,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const prisma = new PrismaClient();
 const creditService = createCreditService({ prisma });
+const deviceBindingService = createDeviceBindingService({ prisma });
 
 // Never log the raw URL -- for postgres it carries the password.
 function describeDatabase(url) {
@@ -159,7 +160,7 @@ module.exports = {
     });
   },
 
-  createUser: async (email, password, name = '', referralCode = '',signupIp = '') => {
+  createUser: async (email, password, name = '', referralCode = '',signupIp = '', deviceId='') => {
     const normalizedEmail = normalizeEmail(email);
     const normalizedReferralCode = String(referralCode || '').trim();
 
@@ -256,6 +257,16 @@ module.exports = {
               name: name || ''
             }
           });
+          // Bind the user's device during registration.
+          // The transaction client is used so the binding is committed
+          // together with the user registration.
+          if (deviceId) {
+            await deviceBindingService.bindDeviceToUser(
+              user.id,
+              deviceId,
+              tx
+            );
+          }
 
           /*
           * Personal referral code becomes active after 24 hours.
@@ -535,5 +546,19 @@ module.exports = {
     });
 
     return sessions.map(toSessionDto);
+  },
+   bindDeviceToUser: async (userId, deviceId) => {
+    return deviceBindingService.bindDeviceToUser(
+      userId,
+      deviceId
+    );
+  },
+
+  getDevicesForUser: async (userId) => {
+    return deviceBindingService.getDevicesForUser(userId);
+  },
+
+  getUsersForDevice: async (deviceId) => {
+    return deviceBindingService.getUsersForDevice(deviceId);
   }
 };
