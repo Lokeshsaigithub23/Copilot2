@@ -1,6 +1,9 @@
+//src/controllers/session.controller.js
+
 const fs = require('fs');
 const multer = require('multer');
 const path = require('path');
+const usageService = require('../services/usage.service');
 
 function resolvePrivateFilePath(uploadRoot, storedPath) {
   const resolvedRoot = path.resolve(uploadRoot);
@@ -19,10 +22,81 @@ function createSessionController({ db, config }) {
     upload,
     create: async (req, res) => {
       try {
-        if (!req.body) return res.status(400).json({ error: { message: 'Session data is required.' } });
-        const session = await db.createSession(req.body, req.user.userId);
-        res.status(201).json({ ok: true, message: 'Session created successfully.', session: { id: session.id, title: session.title } });
-      } catch (err) { console.error('Create session error:', err.message); res.status(500).json({ error: { message: 'Failed to save interview session metadata.' } }); }
+        if (!req.body) {
+          return res.status(400).json({
+            error: {
+              message: 'Session data is required.'
+            }
+          });
+        }
+
+        const userId = req.user?.userId;
+
+        if (!userId) {
+          return res.status(401).json({
+            error: {
+              message: 'Unauthorized.'
+            }
+          });
+        }
+
+        const durationSeconds = Math.max(
+          0,
+          Math.ceil(Number(req.body.durationSeconds) || 0)
+        );
+
+        // /api/sessions is the Copilot / InterviewPanel session endpoint.
+        // Do not charge anything for a zero-duration session.
+        if (durationSeconds > 0) {
+          const access = await usageService.checkFeatureAccess(
+            userId,
+            'copilot',
+            durationSeconds
+          );
+
+          if (!access.allowed) {
+            return res.status(403).json({
+              error: {
+                code: 'COPILOT_USAGE_LIMIT_EXCEEDED',
+                message: 'Your Copilot usage limit has been reached.',
+                tier: access.tier,
+                limitSeconds: access.limitSeconds,
+                usedSeconds: access.usedSeconds,
+                remainingSeconds: access.remainingSeconds,
+                requestedSeconds: durationSeconds
+              }
+            });
+          }
+        }
+
+        const session = await db.createSession(req.body, userId);
+
+        // Record the actual session duration after the session is saved.
+        if (durationSeconds > 0) {
+          await usageService.recordUsage(
+            userId,
+            'copilot',
+            durationSeconds
+          );
+        }
+
+        res.status(201).json({
+          ok: true,
+          message: 'Session created successfully.',
+          session: {
+            id: session.id,
+            title: session.title
+          }
+        });
+      } catch (err) {
+        console.error('Create session error:', err.message);
+
+        res.status(500).json({
+          error: {
+            message: 'Failed to save interview session metadata.'
+          }
+        });
+      }
     },
     uploadAudio: async (req, res) => {
       try {

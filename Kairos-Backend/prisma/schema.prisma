@@ -18,10 +18,91 @@ model User {
   sessions                 Session[]
   referralProfile          ReferralProfile?
   creditAccount            CreditAccount?
+  subscriptions            Subscription[]
+  payments                 Payment[]
+  featureUsages            FeatureUsage[]
   bannedAt                 DateTime?
   emailVerificationTokens  EmailVerificationToken[]
   devices                  UserDevice[]
 }
+
+model SubscriptionPlan {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  monthlyPrice    Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  includedCredits Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscriptions Subscription[]
+  payments      Payment[]
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String
+  planId               String
+  status               String    @default("active")
+  billingCycle         String    @default("monthly")
+  startDate            DateTime  @default(now())
+  endDate              DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+}
+
+model Payment {
+  id                    String    @id @default(cuid())
+  userId                String
+  planId                String?
+  subscriptionId        String?
+  amount                Decimal   @db.Decimal(10, 2)
+  currency              String
+  creditAmountUsed      Int       @default(0)
+  status                String    @default("pending")
+  provider              String    @default("stripe")
+  providerPaymentId     String?   @unique
+  providerCheckoutId    String?   @unique
+  idempotencyKey        String    @unique
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([planId])
+}
+
+model FeatureUsage {
+  id         String   @id @default(cuid())
+  userId     String
+  feature    String
+  periodStart DateTime
+  periodEnd   DateTime
+  usedSeconds Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, feature, periodStart])
+  @@index([userId, periodEnd])
+  @@index([userId, feature])
+}
+
 
 model UserDevice {
   id           String   @id @default(cuid())
@@ -259,13 +340,35 @@ model CreditAccount {
   id               String   @id @default(cuid())
   userId           String   @unique
   availableCredits Int      @default(0)
+  reservedCredits  Int      @default(0)
   pendingCredits   Int      @default(0)
   lifetimeEarned   Int      @default(0)
   version          Int      @default(0)
   updatedAt        DateTime @updatedAt
 
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entries CreditLedger[]
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries       CreditLedger[]
+  reservations  CreditReservation[]
+}
+
+model CreditReservation {
+  id             String   @id @default(cuid())
+  userId         String
+  accountId      String
+  amount         Int
+  status         String   @default("reserved")
+  idempotencyKey String   @unique
+  paymentId      String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  account CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([accountId, status])
+  @@index([expiresAt])
+  @@index([paymentId])
 }
 
 model CreditLedger {

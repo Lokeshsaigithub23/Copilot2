@@ -1,5 +1,8 @@
+//notepad src\websocket\gateway.js
+
 const { WebSocketServer, WebSocket } = require('ws');
 const { verifyWebSocketToken } = require('../middleware/auth');
+const usageService = require('../services/usage.service');
 const { resolveSttProvider, getLanguageConfig } = require('../config/languages');
 
 function normalizeCloseCode(code) {
@@ -194,6 +197,7 @@ function attachWebSocketGateway(httpServer, config) {
     if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
     req.user = user;
     const target = url.pathname === '/api/transcribe/live' ? transcribeServer : voiceAgentServer;
+    req.authUser = user;
     target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws, req));
   });
 
@@ -411,18 +415,194 @@ function attachWebSocketGateway(httpServer, config) {
     });
   });
 
-  voiceAgentServer.on('connection', (browserWs) => {
+  voiceAgentServer.on('connection', async (browserWs, req) => {
+    const userId = req.authUser?.userId || req.authUser?.id;
+
+    if (!userId) {
+      browserWs.send(JSON.stringify({
+        type: 'Error',
+        code: 'UNAUTHORIZED',
+        message: 'Authentication is required.'
+      }));
+      return browserWs.close(4001, 'Authentication required');
+    }
+
+    // Check remaining Voice usage before opening Deepgram connection
+    const voiceAccess = await usageService.checkFeatureAccess(
+      userId,
+      'voice',
+      1
+    );
+
+    if (!voiceAccess.allowed) {
+      browserWs.send(JSON.stringify({
+        type: 'Error',
+        code: 'VOICE_USAGE_LIMIT_EXCEEDED',
+        message:
+          'Your Voice usage limit has been reached. Please upgrade your plan to continue.',
+        tier: voiceAccess.tier,
+        limitSeconds: voiceAccess.limitSeconds,
+        usedSeconds: voiceAccess.usedSeconds,
+        remainingSeconds: voiceAccess.remainingSeconds
+      }));
+
+      return browserWs.close(4003, 'Voice usage limit exceeded');
+    }
+
+    const remainingSeconds = Math.max(
+      1,
+      Math.floor(voiceAccess.remainingSeconds)
+    );
+
+    const startedAt = Date.now();
+    let usageRecorded = false;
+
+    const recordVoiceUsage = async () => {
+      if (usageRecorded) return;
+
+      usageRecorded = true;
+
+      const elapsedSeconds = Math.floor(
+        (Date.now() - startedAt) / 1000
+      );
+
+      const actualSeconds = Math.min(
+        remainingSeconds,
+        Math.max(0, elapsedSeconds)
+      );
+
+      if (actualSeconds > 0) {
+        try {
+          await usageService.recordUsage(
+            userId,
+            'voice',
+            actualSeconds
+          );
+        } catch (error) {
+          console.error(
+            '[voice-agent] Failed to record voice usage:',
+            error.message
+          );
+        }
+      }
+    };
+
+    const usageTimer = setTimeout(async () => {
+      await recordVoiceUsage();
+
+      if (browserWs.readyState === WebSocket.OPEN) {
+        browserWs.send(JSON.stringify({
+          type: 'Error',
+          code: 'VOICE_USAGE_LIMIT_EXCEEDED',
+          message:
+            'Your Voice usage limit has been reached. Please upgrade your plan to continue.'
+        }));
+
+        browserWs.close(
+          4003,
+          'Voice usage limit exceeded'
+        );
+      }
+    }, remainingSeconds * 1000);
+
     const apiKey = process.env.DEEPGRAM_API_KEY;
-    if (!apiKey) { browserWs.send(JSON.stringify({ type: 'Error', message: 'DEEPGRAM_API_KEY not configured on server.' })); return browserWs.close(); }
-    const deepgramWs = new WebSocket('wss://agent.deepgram.com/v1/agent/converse', ['token', apiKey]);
+
+    if (!apiKey) {
+      clearTimeout(usageTimer);
+
+      browserWs.send(JSON.stringify({
+        type: 'Error',
+        message:
+          'DEEPGRAM_API_KEY not configured on server.'
+      }));
+
+      return browserWs.close();
+    }
+
     const queue = [];
-    deepgramWs.on('open', () => { while (queue.length) { const item = queue.shift(); deepgramWs.send(item.data, { binary: item.isBinary }); } });
-    deepgramWs.on('message', (data, isBinary) => { if (browserWs.readyState === WebSocket.OPEN) browserWs.send(data, { binary: isBinary }); });
-    deepgramWs.on('error', (err) => { console.error('[voice-agent] Provider error:', err.message); if (browserWs.readyState === WebSocket.OPEN) browserWs.send(JSON.stringify({ type: 'Error', message: 'Voice agent provider is temporarily unavailable.' })); });
-    deepgramWs.on('close', (code) => { if (browserWs.readyState === WebSocket.OPEN) browserWs.close(normalizeCloseCode(code)); });
-    browserWs.on('message', (data, isBinary) => { if (deepgramWs.readyState === WebSocket.OPEN) deepgramWs.send(data, { binary: isBinary }); else queue.push({ data, isBinary }); });
-    browserWs.on('close', () => { if (deepgramWs.readyState === WebSocket.OPEN) deepgramWs.close(); });
-    browserWs.on('error', (err) => { console.error('[voice-agent] Browser WS error:', err.message); if (deepgramWs.readyState === WebSocket.OPEN) deepgramWs.close(); });
+
+    const deepgramWs = new WebSocket(
+      'wss://agent.deepgram.com/v1/agent/converse',
+      ['token', apiKey]
+    );
+
+    deepgramWs.on('open', () => {
+      while (queue.length) {
+        const item = queue.shift();
+
+        deepgramWs.send(
+          item.data,
+          { binary: item.isBinary }
+        );
+      }
+    });
+
+    deepgramWs.on('message', (data, isBinary) => {
+      if (browserWs.readyState === WebSocket.OPEN) {
+        browserWs.send(data, {
+          binary: isBinary
+        });
+      }
+    });
+
+    deepgramWs.on('error', (err) => {
+      console.error(
+        '[voice-agent] Provider error:',
+        err.message
+      );
+
+      if (browserWs.readyState === WebSocket.OPEN) {
+        browserWs.send(JSON.stringify({
+          type: 'Error',
+          message:
+            'Voice agent provider is temporarily unavailable.'
+        }));
+      }
+    });
+
+    deepgramWs.on('close', (code) => {
+      if (browserWs.readyState === WebSocket.OPEN) {
+        browserWs.close(normalizeCloseCode(code));
+      }
+    });
+
+    browserWs.on('message', (data, isBinary) => {
+      if (deepgramWs.readyState === WebSocket.OPEN) {
+        deepgramWs.send(data, {
+          binary: isBinary
+        });
+      } else {
+        queue.push({
+          data,
+          isBinary
+        });
+      }
+    });
+
+    browserWs.on('close', async () => {
+      clearTimeout(usageTimer);
+
+      await recordVoiceUsage();
+
+      if (deepgramWs.readyState === WebSocket.OPEN) {
+        deepgramWs.close();
+      }
+    });
+
+    browserWs.on('error', async (err) => {
+      console.error(
+        '[voice-agent] Browser WS error:',
+        err.message
+      );
+
+      clearTimeout(usageTimer);
+
+      await recordVoiceUsage();
+
+      if (deepgramWs.readyState === WebSocket.OPEN) {
+        deepgramWs.close();
+      }
+    });
   });
 }
 
