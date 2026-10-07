@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "ai-communication-copilot-7f9c0",
+    "staging": "ai-communication-copilot-7f9c0",
+    "production": "copilotiq-prod"
+  }
+}

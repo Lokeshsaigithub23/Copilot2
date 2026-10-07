@@ -1,68 +1,27 @@
-# Dependencies
-node_modules/
-**/node_modules/
-
-# Environment files / secrets
-.env
-.env.*
-!.env.example
-
-# Build output
-dist/
-build/
-**/dist/
-**/build/
-
 # Logs
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# OS files
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-Thumbs.db
-
-# Editor
-.vscode/
-.idea/
-
-# Temporary / test files
-*.tmp
-*.temp
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-
-# Backup directories
-Kairos-Backend-BACKUP/
-
-# Local database / generated files
-*.sqlite
-*.sqlite3
-
-# Temporary frontend/debug files
-Kairos-Frontend/milestone.count
-Kairos-Frontend/qualifiedCount
-Kairos-Frontend/referral-search.txt
-Kairos-Frontend/setCopied(false)
-
-# Temporary root files
-/a1.jsx
-/a2.jsx
-/c1.js
-/c2.js
-/g1.js
-/g2.js
-/i1.jsx
-/i2.jsx
-/n1.jsx
-/n11.jsx
-/n2.jsx
-/n22.jsx
-/p1.jsx
-/p2.jsx
-/s.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.env
+.env.production
+.env.staging
