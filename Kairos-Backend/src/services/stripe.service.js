@@ -114,6 +114,10 @@ function createStripeService({ prisma,creditService }) {
         {
           mode: 'payment',
 
+          phone_number_collection: {
+            enabled: true
+          },
+
           line_items: [
             {
               price_data: {
@@ -306,9 +310,21 @@ function createStripeService({ prisma,creditService }) {
                   })
                 : null;
 
-            subscription =
-              existingSubscription ||
-              await tx.subscription.create({
+            if (existingSubscription) {
+              subscription = existingSubscription;
+            } else {
+              await tx.subscription.updateMany({
+                where: {
+                  userId: payment.userId,
+                  status: 'active'
+                },
+                data: {
+                  status: 'inactive',
+                  endDate: new Date()
+                }
+              });
+
+              subscription = await tx.subscription.create({
                 data: {
                   userId: payment.userId,
                   planId: payment.planId,
@@ -317,6 +333,7 @@ function createStripeService({ prisma,creditService }) {
                   startDate: new Date()
                 }
               });
+            }
           }
 
           /*
