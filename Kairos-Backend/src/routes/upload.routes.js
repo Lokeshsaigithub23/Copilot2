@@ -3,11 +3,12 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const OpenAI = require('openai');
+const usageService = require('../services/usage.service');
 
-function createUploadRoutes(authenticateToken) {
+function createUploadRoutes(authenticateToken, creditService) {
   const router = express.Router();
   const uploadDirectory = path.resolve(path.join(__dirname, '../../uploads'));
-  
+  const DOWNLOAD_CREDIT_COSTS = {transcript: 25,pdf: 25,audio: 100,};
   // Configure multer storage
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -25,7 +26,7 @@ function createUploadRoutes(authenticateToken) {
   
   const upload = multer({
     storage,
-    limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB limit
+    limits: { fileSize: 2048 * 1024 * 1024 }, // 200 MB limit
     fileFilter: (req, file, callback) => {
       const extension = path.extname(file.originalname || '').toLowerCase();
       const mime = String(file.mimetype || '').toLowerCase();
@@ -55,6 +56,46 @@ function createUploadRoutes(authenticateToken) {
     }
   }
   
+  function enforceUploadLimit(req, res, file) {
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId || !file) {
+      return {
+        allowed: false,
+        response: res.status(400).json({
+          ok: false,
+          error: 'Unable to validate upload.'
+        })
+      };
+    }
+
+    return usageService.getUploadLimit(userId).then((limit) => {
+      if (file.size <= limit.maxUploadBytes) {
+        return { allowed: true, limit };
+      }
+
+      try {
+        if (file.path && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      } catch (_) {}
+
+      return {
+        allowed: false,
+        response: res.status(413).json({
+          ok: false,
+          code: 'UPLOAD_LIMIT_EXCEEDED',
+          error: `Your ${limit.tier} plan allows files up to ${limit.maxUploadMb} MB.`,
+          upload: {
+            plan: limit.tier,
+            maxUploadMb: limit.maxUploadMb,
+            fileSizeMb: Number((file.size / (1024 * 1024)).toFixed(2))
+          }
+        })
+      };
+    });
+  }
+
   function writeHistory(history) {
     try {
       fs.writeFileSync(historyFilePath, JSON.stringify(history, null, 2), 'utf8');
@@ -65,25 +106,176 @@ function createUploadRoutes(authenticateToken) {
 
   // Files are private resources. Resolve only server-recorded paths belonging
   // to the authenticated user, and never accept a client-provided filesystem path.
-  router.get('/file/:filename', authenticateToken, (req, res) => {
+  router.get('/file/:filename', authenticateToken, async (req, res) => {
     try {
       const userId = req.user?.id || req.user?.userId;
       const filename = path.basename(req.params.filename || '');
+
+      if (!userId) {
+        return res.status(401).json({
+          ok: false,
+          code: 'UNAUTHORIZED',
+          error: 'Authentication required.',
+        });
+      }
+
       const session = readHistory().find((item) => {
-        return item.userId === userId && path.basename(item.filePath || '') === filename;
+        return (
+          item.userId === userId &&
+          path.basename(item.filePath || '') === filename
+        );
       });
 
-      if (!session) return res.status(404).json({ ok: false, error: 'File not found.' });
+      if (!session) {
+        return res.status(404).json({
+          ok: false,
+          error: 'File not found.',
+        });
+      }
 
       const filePath = path.resolve(session.filePath);
-      if (!filePath.startsWith(`${uploadDirectory}${path.sep}`) || !fs.existsSync(filePath)) {
-        return res.status(404).json({ ok: false, error: 'File not found.' });
+
+      if (
+        !filePath.startsWith(`${uploadDirectory}${path.sep}`) ||
+        !fs.existsSync(filePath)
+      ) {
+        return res.status(404).json({
+          ok: false,
+          error: 'File not found.',
+        });
       }
+
+      const downloadCost = DOWNLOAD_CREDIT_COSTS.audio;
+
+      const account = await creditService.getAccount(userId);
+      const availableCredits = Number(account?.availableCredits || 0);
+
+      if (availableCredits < downloadCost) {
+        return res.status(403).json({
+          ok: false,
+          code: 'DOWNLOAD_CREDITS_REQUIRED',
+          error: 'Insufficient credits to download this file.',
+          credits: {
+            required: downloadCost,
+            available: availableCredits,
+          },
+        });
+      }
+
+      const idempotencyRef =
+        `download:audio:${userId}:${filename}:` +
+        `${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+
+      await creditService.debitCredits({
+        userId,
+        amount: downloadCost,
+        idempotencyRef,
+        refType: 'download',
+        refId: filename,
+        reason: 'Audio file download',
+      });
 
       return res.sendFile(filePath);
     } catch (err) {
-      console.error('[Upload File] Failed to serve private file:', err.message);
-      return res.status(404).json({ ok: false, error: 'File not found.' });
+      console.error('[Upload File] Failed to serve private file:', err);
+
+      if (err?.message === 'Insufficient available credits') {
+        return res.status(403).json({
+          ok: false,
+          code: 'DOWNLOAD_CREDITS_REQUIRED',
+          error: 'Insufficient credits to download this file.',
+        });
+      }
+
+      return res.status(500).json({
+        ok: false,
+        error: 'Unable to download file.',
+      });
+    }
+  });
+
+
+  router.post('/download/authorize', authenticateToken, async (req, res) => {
+    try {
+      const userId = req.user?.id || req.user?.userId;
+
+      if (!userId) {
+        return res.status(401).json({
+          ok: false,
+          code: 'UNAUTHORIZED',
+          error: 'Authentication required.',
+        });
+      }
+
+      const type = String(req.body?.type || '').toLowerCase();
+
+      if (!['transcript', 'pdf', 'audio'].includes(type)) {
+        return res.status(400).json({
+          ok: false,
+          code: 'INVALID_DOWNLOAD_TYPE',
+          error: 'Invalid download type.',
+        });
+      }
+
+      const downloadCost = DOWNLOAD_CREDIT_COSTS[type];
+
+      const account = await creditService.getAccount(userId);
+      const availableCredits = Number(account?.availableCredits || 0);
+
+      if (availableCredits < downloadCost) {
+        return res.status(403).json({
+          ok: false,
+          code: 'DOWNLOAD_CREDITS_REQUIRED',
+          error: 'Insufficient credits to download this file.',
+          credits: {
+            required: downloadCost,
+            available: availableCredits,
+          },
+        });
+      }
+
+      const idempotencyRef =
+        `download:${type}:${userId}:` +
+        `${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+
+      await creditService.debitCredits({
+        userId,
+        amount: downloadCost,
+        idempotencyRef,
+        refType: 'download',
+        refId: type,
+        reason:
+          type === 'pdf'
+            ? 'PDF download'
+            : 'Transcript download',
+      });
+
+      return res.json({
+        ok: true,
+        type,
+        credits: {
+          charged: downloadCost,
+          remaining: Math.max(
+            0,
+            availableCredits - downloadCost
+          ),
+        },
+      });
+    } catch (err) {
+      console.error('[Download Authorization] Failed:', err);
+
+      if (err?.message === 'Insufficient available credits') {
+        return res.status(403).json({
+          ok: false,
+          code: 'DOWNLOAD_CREDITS_REQUIRED',
+          error: 'Insufficient credits to download this file.',
+        });
+      }
+
+      return res.status(500).json({
+        ok: false,
+        error: 'Unable to authorize download.',
+      });
     }
   });
 
@@ -162,8 +354,16 @@ function createUploadRoutes(authenticateToken) {
   }
 
   // Store the file first. Transcription is started explicitly by the client.
-  router.post('/upload-file', authenticateToken, upload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ ok: false, error: 'No file uploaded.' });
+  router.post('/upload-file', authenticateToken, upload.single('file'), async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No file uploaded.'
+      });
+    }
+
+    const uploadAllowed = await enforceUploadLimit(req, res, req.file);
+    if (!uploadAllowed.allowed) return;
 
     const userId = req.user?.id || req.user?.userId;
     const fileUrl = buildUploadFileUrl(req.file.filename);
@@ -207,7 +407,42 @@ function createUploadRoutes(authenticateToken) {
     }
 
     try {
-      const result = await transcribeFile(session.filePath, session.mimeType, req.body?.language || 'en');
+      const result = await transcribeFile(
+        session.filePath,
+        session.mimeType,
+        req.body?.language || 'en'
+      );
+
+      const durationSeconds = Math.ceil(
+        Number(result.durationSeconds) || 0
+      );
+
+      const access = await usageService.checkFeatureAccess(
+        userId,
+        'notetaker',
+        durationSeconds
+      );
+
+      if (!access.allowed) {
+        return res.status(403).json({
+          ok: false,
+          code: 'NOTETAKER_LIMIT_REACHED',
+          error: 'Notetaker usage limit reached.',
+          usage: {
+            limitSeconds: access.limitSeconds,
+            usedSeconds: access.usedSeconds,
+            remainingSeconds: access.remainingSeconds,
+            requestedSeconds: durationSeconds,
+          },
+        });
+      }
+
+      await usageService.recordUsage(
+        userId,
+        'notetaker',
+        durationSeconds
+      );
+
       Object.assign(session, result);
       session.isTranscribing = false;
       const sessionIndex = history.findIndex((item) => item.id === session.id);
@@ -283,10 +518,17 @@ function createUploadRoutes(authenticateToken) {
   // Endpoint: Analyze uploaded file
   router.post('/analyze', authenticateToken, upload.single('file'), async (req, res) => {
     const file = req.file;
+
     if (!file) {
-      return res.status(400).json({ ok: false, error: 'No file uploaded.' });
+      return res.status(400).json({
+        ok: false,
+        error: 'No file uploaded.'
+      });
     }
-    
+
+    const uploadAllowed = await enforceUploadLimit(req, res, file);
+    if (!uploadAllowed.allowed) return;
+
     const userId = req.user?.id || req.user?.userId;
     const filePath = file.path;
     const mimetype = file.mimetype;
@@ -349,6 +591,35 @@ function createUploadRoutes(authenticateToken) {
 
       // Calculate accurate media duration from Deepgram metadata or last utterance end
       const durationSeconds = dgPayload?.metadata?.duration || (rawUtterances.length > 0 ? rawUtterances[rawUtterances.length - 1].end : 0) || 0;
+      const access = await usageService.checkFeatureAccess(
+        userId,
+        'notetaker',
+        Math.ceil(Number(durationSeconds) || 0)
+      );
+
+      if (!access.allowed) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch (_) {}
+
+        return res.status(403).json({
+          ok: false,
+          code: 'NOTETAKER_LIMIT_REACHED',
+          error: 'Notetaker usage limit reached.',
+          usage: {
+            limitSeconds: access.limitSeconds,
+            usedSeconds: access.usedSeconds,
+            remainingSeconds: access.remainingSeconds,
+            requestedSeconds: Math.ceil(Number(durationSeconds) || 0),
+          },
+        });
+      }
+
+      await usageService.recordUsage(
+        userId,
+        'notetaker',
+        Math.ceil(Number(durationSeconds) || 0)
+      );
       const durMins = Math.floor(durationSeconds / 60);
       const durSecs = Math.floor(durationSeconds % 60);
       const formattedDuration = durationSeconds > 0 ? `${durMins}:${durSecs < 10 ? '0' : ''}${durSecs}` : '0:30';
@@ -674,10 +945,17 @@ Instructions:
   // Endpoint: Transcribe short microphone audio recorded from frontend
   router.post('/transcribe-mic', authenticateToken, upload.single('file'), async (req, res) => {
     const file = req.file;
+
     if (!file) {
-      return res.status(400).json({ ok: false, error: 'No audio file received.' });
+      return res.status(400).json({
+        ok: false,
+        error: 'No audio file received.'
+      });
     }
-    
+
+    const uploadAllowed = await enforceUploadLimit(req, res, file);
+    if (!uploadAllowed.allowed) return;
+
     const filePath = file.path;
     const lang = req.query.lang || 'en-US';
 

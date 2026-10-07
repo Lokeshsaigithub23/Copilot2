@@ -16,6 +16,11 @@ const { createAiController } = require('./controllers/ai.controller');
 const { createReferralController } = require('./controllers/referral.controller');
 const { createReferralService } = require('./services/referral.service');
 const { createCreditService } = require('./services/credit.service');
+const { createBillingService } =
+  require('./services/billing.service');
+
+const { createStripeService } =
+  require('./services/stripe.service');
 const { createAuthRoutes } = require('./routes/auth.routes');
 const { createProfileRoutes } = require('./routes/profile.routes');
 const { createSessionRoutes } = require('./routes/session.routes');
@@ -38,6 +43,8 @@ const { createUploadRoutes } = require('./routes/upload.routes');
 const { createVoiceAgentRoutes } = require('./routes/voice-agent.routes');
 const { createVideoRoutes } = require('./routes/video.routes');
 const { createInterviewPanelRoutes } = require('./routes/interview-panel.routes');
+const { createBillingController } = require('./controllers/billing.controller');
+const { createBillingRoutes } = require('./routes/billing.routes');
 
 // Build the cors() options from config.corsOrigins.
 //
@@ -98,6 +105,16 @@ function createApp({ db, config }) {
   });
   const creditService = createCreditService({
     prisma: db.prisma || db
+  });
+  const stripeService = createStripeService({
+    prisma: db.prisma || db,
+    creditService
+  });
+
+  const billingService = createBillingService({
+    prisma: db.prisma || db,
+    creditService,
+    stripeService
   });
   const referralMilestoneService =
     createReferralMilestoneService({
@@ -201,12 +218,53 @@ function createApp({ db, config }) {
     referralQualificationService,
     referralMilestoneService
   });
+  const billingController = createBillingController({
+    billingService
+  });
 
   const campaignController = createCampaignController({
     campaignService
   });
 
   app.use(cors(corsOptions(config)));
+  // Stripe webhook — MUST receive raw body
+  
+  app.post(
+    '/api/billing/webhook',
+    express.raw({
+      type: 'application/json'
+    }),
+    async (req, res, next) => {
+      try {
+        const signature =
+          req.headers['stripe-signature'];
+
+        if (!signature) {
+          return res.status(400).json({
+            ok: false,
+            error: {
+              message: 'Missing Stripe signature'
+            }
+          });
+        }
+
+        const result =
+          await billingService.handleWebhook({
+            rawBody: req.body,
+            signature
+          });
+
+        return res.json({
+          ok: true,
+          ...result
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  // Normal JSON parser MUST come after webhook
   app.use(express.json({ limit: '100mb' }));
   app.use((req, res, next) => {
     req.requestId = crypto.randomUUID();
@@ -242,8 +300,14 @@ function createApp({ db, config }) {
   app.use('/api/profiles', createProfileRoutes(profileController, authenticateToken));
   app.use('/api/interview-panel-sessions', createSessionRoutes(sessionController, authenticateToken));
   app.use('/api/sessions', createSessionRoutes(sessionController, authenticateToken));
+
+  app.use(
+    '/api',
+    createBillingRoutes(billingController, authenticateToken)
+  );
+
   app.use('/api', createAiRoutes(aiController, authenticateToken));
-  app.use('/api/upload', createUploadRoutes(authenticateToken));
+  app.use('/api/upload',createUploadRoutes(authenticateToken, creditService));
   app.use('/api/interview-panel', createInterviewPanelRoutes(authenticateToken));
   app.use('/api/video', createVideoRoutes(authenticateToken));
   app.use('/api/voice-agent', createVoiceAgentRoutes(authenticateToken));
@@ -254,7 +318,13 @@ function createApp({ db, config }) {
       message: err.message,
       stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
     });
-    res.status(500).json({ error: { message: 'An unexpected error occurred on the server.', requestId: req.requestId } });
+    res.status(500).json({
+      error: {
+        message: err.message,
+        name: err.name,
+        requestId: req.requestId
+      }
+    });
   });
   return app;
 }

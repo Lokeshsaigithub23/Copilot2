@@ -1,3 +1,4 @@
+//src/services/credit.service.js
 function createCreditService({ prisma }) {
   async function getAccount(userId, tx = prisma) {
     return tx.creditAccount.findUnique({
@@ -23,6 +24,263 @@ function createCreditService({ prisma }) {
         version: 0
       }
     });
+  }
+
+
+  async function reserveCredits({
+    userId,
+    amount,
+    idempotencyKey,
+    paymentId = null,
+    expiresAt
+  }, tx = prisma) {
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new Error('Reservation amount must be a positive integer');
+    }
+
+    if (!idempotencyKey) {
+      throw new Error('idempotencyKey is required');
+    }
+
+    if (!expiresAt) {
+      throw new Error('expiresAt is required');
+    }
+
+    const existing = await tx.creditReservation.findUnique({
+      where: { idempotencyKey }
+    });
+
+    if (existing) {
+      return {
+        duplicate: true,
+        reservation: existing
+      };
+    }
+
+    const account = await tx.creditAccount.findUnique({
+      where: { userId }
+    });
+
+    if (!account) {
+      throw new Error('Credit account not found');
+    }
+
+    /*
+     * Atomic conditional update.
+     *
+     * This prevents two simultaneous purchases from reserving
+     * the same credits.
+     */
+    const updatedCount = await tx.creditAccount.updateMany({
+      where: {
+        id: account.id,
+        availableCredits: {
+          gte: amount
+        }
+      },
+      data: {
+        availableCredits: {
+          decrement: amount
+        },
+        reservedCredits: {
+          increment: amount
+        },
+        version: {
+          increment: 1
+        }
+      }
+    });
+
+    if (updatedCount.count !== 1) {
+      throw new Error('Insufficient available credits');
+    }
+
+    const reservation = await tx.creditReservation.create({
+      data: {
+        userId,
+        accountId: account.id,
+        amount,
+        status: 'reserved',
+        idempotencyKey,
+        paymentId,
+        expiresAt
+      }
+    });
+
+    return {
+      duplicate: false,
+      reservation
+    };
+  }
+
+  async function consumeReservation({
+    reservationId,
+    idempotencyRef,
+    reason = 'Credits used for payment'
+  }, tx = prisma) {
+    if (!reservationId) {
+      throw new Error('reservationId is required');
+    }
+
+    if (!idempotencyRef) {
+      throw new Error('idempotencyRef is required');
+    }
+
+    const reservation = await tx.creditReservation.findUnique({
+      where: { id: reservationId }
+    });
+
+    if (!reservation) {
+      throw new Error('Credit reservation not found');
+    }
+
+    if (reservation.status === 'consumed') {
+      return {
+        duplicate: true,
+        reservation
+      };
+    }
+
+    if (reservation.status !== 'reserved') {
+      throw new Error(
+        `Credit reservation cannot be consumed from status: ${reservation.status}`
+      );
+    }
+
+    const existingLedger = await tx.creditLedger.findUnique({
+      where: { idempotencyRef }
+    });
+
+    if (existingLedger) {
+      return {
+        duplicate: true,
+        reservation,
+        ledger: existingLedger
+      };
+    }
+
+    const account = await tx.creditAccount.findUnique({
+      where: { id: reservation.accountId }
+    });
+
+    if (!account) {
+      throw new Error('Credit account not found');
+    }
+
+    if (account.reservedCredits < reservation.amount) {
+      throw new Error('Reserved credit balance is insufficient');
+    }
+
+    const updated = await tx.creditAccount.update({
+      where: { id: account.id },
+      data: {
+        reservedCredits: {
+          decrement: reservation.amount
+        },
+        version: {
+          increment: 1
+        }
+      }
+    });
+
+    const ledger = await tx.creditLedger.create({
+      data: {
+        accountId: updated.id,
+        entryType: 'usage_debit',
+        delta: -reservation.amount,
+        availableAfter: updated.availableCredits,
+        pendingAfter: updated.pendingCredits,
+        idempotencyRef,
+        refType: 'payment',
+        refId: reservation.paymentId,
+        reason
+      }
+    });
+
+    const updatedReservation = await tx.creditReservation.update({
+      where: { id: reservation.id },
+      data: {
+        status: 'consumed'
+      }
+    });
+
+    return {
+      duplicate: false,
+      reservation: updatedReservation,
+      account: updated,
+      ledger
+    };
+  }
+
+  async function releaseReservation({
+    reservationId,
+    reason = 'Payment failed or cancelled'
+  }, tx = prisma) {
+    if (!reservationId) {
+      throw new Error('reservationId is required');
+    }
+
+    const reservation = await tx.creditReservation.findUnique({
+      where: { id: reservationId }
+    });
+
+    if (!reservation) {
+      throw new Error('Credit reservation not found');
+    }
+
+    if (reservation.status === 'released') {
+      return {
+        duplicate: true,
+        reservation
+      };
+    }
+
+    if (reservation.status !== 'reserved') {
+      throw new Error(
+        `Credit reservation cannot be released from status: ${reservation.status}`
+      );
+    }
+
+    const account = await tx.creditAccount.findUnique({
+      where: { id: reservation.accountId }
+    });
+
+    if (!account) {
+      throw new Error('Credit account not found');
+    }
+
+    if (account.reservedCredits < reservation.amount) {
+      throw new Error('Reserved credit balance is insufficient');
+    }
+
+    const updated = await tx.creditAccount.update({
+      where: { id: account.id },
+      data: {
+        reservedCredits: {
+          decrement: reservation.amount
+        },
+        availableCredits: {
+          increment: reservation.amount
+        },
+        version: {
+          increment: 1
+        }
+      }
+    });
+
+    const updatedReservation = await tx.creditReservation.update({
+      where: { id: reservation.id },
+      data: {
+        status: 'released'
+      }
+    });
+
+    return {
+      duplicate: false,
+      reservation: updatedReservation,
+      account: updated,
+      reason
+    };
   }
 
   async function addAvailableCredits({
@@ -255,7 +513,10 @@ function createCreditService({ prisma }) {
     getOrCreateAccount,
     addAvailableCredits,
     addPendingCredits,
-    debitCredits
+    debitCredits,
+    reserveCredits,
+    consumeReservation,
+    releaseReservation
   };
 }
 
