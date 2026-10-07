@@ -1,0 +1,2514 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { API_BASE } from '../../utils/api';
+import './SubscriptionPage.css';
+import PaymentCheckoutModal from './PaymentCheckoutModal';
+import SubscriptionHistoryModal from './SubscriptionHistoryModal';
+import GlobalCurrencySelector from './GlobalCurrencySelector';
+import { getCurrency, convertFromUSD, convertToUSD, formatPriceWithConversion, CREDITS_PER_USD } from './currencyData';
+import { getStoredCredits, setUserCredits, addTransactionRecord } from './transactionHistoryStore';
+import './TopUpPlansSection.css';
+import { BASE_PLANS, SUBSCRIPTION_PRICING, updateSubscriptionPricing } from './subscriptionPlansConfig';
+import { getActiveUserPlanTier, setActiveUserPlanTier, getFeatureUsage, recordTopUpSuccess } from './topUpStore';
+import { getDownloadStatus, getCopilotMinutesUsed, getVoiceMinutesUsed, updateDynamicPlanLimits } from '../../config/creditUsageConfig';
+
+// Centralized base plans ($0 Free, $19 Pro, $29 Pro Plus)
+const FALLBACK_PLANS = BASE_PLANS;
+
+function formatMinutesToReadable(minutes, isTrial = false) {
+  if (!minutes || minutes <= 0) return '0 mins';
+  if (minutes >= 60) {
+    const hrs = minutes / 60;
+    return `${Number.isInteger(hrs) ? hrs : hrs.toFixed(1)} hrs / mo (${minutes.toLocaleString()} mins)`;
+  }
+  return `${minutes} mins ${isTrial ? 'total (trial)' : '/ mo'}`;
+}
+
+export default function SubscriptionPage({
+  token,
+  user,
+  onBack,
+  onGoToUsage,
+  darkMode,
+  toggleDarkMode,
+  showToast
+}) {
+  const [plans, setPlans] = useState(FALLBACK_PLANS);
+  const [userSubscription, setUserSubscription] = useState(null);
+  const [billingCycle, setBillingCycle] = useState('monthly');
+  const [loading, setLoading] = useState(true);
+
+  // Global Multi-Currency State
+  const [currency, setCurrency] = useState('USD');
+  const currencyObj = getCurrency(currency);
+  const currencySymbol = currencyObj.symbol;
+
+  // Unified Reusable Payment Checkout Modal State
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [checkoutType, setCheckoutType] = useState('subscription'); // 'subscription' | 'credits'
+  const [selectedCheckoutPlan, setSelectedCheckoutPlan] = useState(null);
+  const [creditTopUpAmount, setCreditTopUpAmount] = useState(1);
+  const [targetCheckoutCredits, setTargetCheckoutCredits] = useState(50);
+  const [customCheckoutTitle, setCustomCheckoutTitle] = useState('');
+  const [topUpSuccessCallback, setTopUpSuccessCallback] = useState(null);
+  const [userAvailableCredits, setUserAvailableCredits] = useState(getStoredCredits());
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState(() => getDownloadStatus());
+  const [featureUsage, setFeatureUsage] = useState(() => getFeatureUsage());
+  const [topUpConfirmModal, setTopUpConfirmModal] = useState(null);
+  const [modalPaymentChoice, setModalPaymentChoice] = useState('credits');
+
+  // Interactive Top-Up Stepper Quantities for in-card quota adjustment
+  const [topUpQuantities, setTopUpQuantities] = useState({
+    downloads: 5,
+    copilot: 1,
+    voice: 1,
+    notetaker: 1
+  });
+
+  const handleQuantityStep = (featureId, delta) => {
+    setTopUpQuantities((prev) => {
+      const current = prev[featureId] || 1;
+      const next = Math.max(1, Math.min(100, current + delta));
+      return { ...prev, [featureId]: next };
+    });
+  };
+
+  const handleSetExactQuantity = (featureId, val) => {
+    const num = Math.max(1, Math.min(100, Number(val) || 1));
+    setTopUpQuantities((prev) => ({ ...prev, [featureId]: num }));
+  };
+
+  const fetchCreditBalance = useCallback(async () => {
+    if (!token) {
+      setUserAvailableCredits(getStoredCredits());
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/credits/balance`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-suppress-auth-redirect': 'true'
+          }
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Credit balance request failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      const availableCredits = Number(
+        data?.credits?.availableCredits ?? 0
+      );
+
+      if (Number.isFinite(availableCredits)) {
+        setUserAvailableCredits(availableCredits);
+        setUserCredits(availableCredits);
+      }
+    } catch (err) {
+      console.warn(
+        '[Billing] Credit balance fetch failed, using local balance:',
+        err.message
+      );
+
+      setUserAvailableCredits(getStoredCredits());
+    }
+  }, [token]);
+
+  // Sync state when active user changes or mounts
+  useEffect(() => {
+    fetchCreditBalance();
+    setFeatureUsage(getFeatureUsage());
+    setDownloadStatus(getDownloadStatus());
+  }, [user, fetchCreditBalance]);
+
+  // Listen for live credit balance & usage changes from any checkout actions
+  useEffect(() => {
+    const handleCreditsUpdate = (e) => {
+      if (typeof e.detail === 'number') {
+        setUserAvailableCredits(e.detail);
+      } else {
+        setUserAvailableCredits(getStoredCredits());
+      }
+    };
+    const handleUsageUpdate = () => {
+      setDownloadStatus(getDownloadStatus());
+    };
+    const handleTopUpUpdate = () => {
+      setFeatureUsage(getFeatureUsage());
+      setUserAvailableCredits(getStoredCredits());
+      setDownloadStatus(getDownloadStatus());
+    };
+    window.addEventListener('copilot-credits-updated', handleCreditsUpdate);
+    window.addEventListener('copilot-usage-updated', handleUsageUpdate);
+    window.addEventListener('copilot-topup-updated', handleTopUpUpdate);
+    return () => {
+      window.removeEventListener('copilot-credits-updated', handleCreditsUpdate);
+      window.removeEventListener('copilot-usage-updated', handleUsageUpdate);
+      window.removeEventListener('copilot-topup-updated', handleTopUpUpdate);
+    };
+  }, []);
+
+  // Top-Up execution directly from quota cards - ALWAYS opens the Top-Up Confirmation Modal!
+  const handleExecuteTopUp = (featureId, featureName, unit, creditsPerUnit = 50, priceUSDPerUnit = 1.0) => {
+    const qty = topUpQuantities[featureId] || 1;
+    const totalCredits = qty * creditsPerUnit;
+    const totalUSD = qty * priceUSDPerUnit;
+    const currentCredits = getStoredCredits();
+
+    setModalPaymentChoice(currentCredits >= totalCredits ? 'credits' : 'payment_method');
+    setTopUpConfirmModal({
+      featureId,
+      featureName,
+      unit,
+      qty,
+      creditsPerUnit,
+      priceUSDPerUnit,
+      totalCredits,
+      totalUSD,
+      currentCredits
+    });
+  };
+
+  const handleConfirmCreditsTopUpFromModal = () => {
+    if (!topUpConfirmModal) return;
+    const { featureId, featureName, unit, qty, totalCredits, totalUSD } = topUpConfirmModal;
+    const currentCredits = getStoredCredits();
+
+    if (currentCredits < totalCredits) {
+      if (showToast) showToast('⚠️ Insufficient credits in wallet. Please choose payment method.');
+      setModalPaymentChoice('payment_method');
+      return;
+    }
+
+    const newCredits = currentCredits - totalCredits;
+    setUserCredits(newCredits);
+
+    recordTopUpSuccess({
+      featureId,
+      featureName,
+      quantity: qty,
+      unit,
+      creditsRequired: totalCredits,
+      amountUSD: totalUSD,
+      currency: 'USD',
+      currencySymbol: '$',
+      paymentType: 'credits',
+      paymentMethod: 'Credits Balance',
+      planTier: userSubscription?.tier || userSubscription?.planId || 'FREE'
+    });
+
+    addTransactionRecord({
+      type: 'Quota Top-up',
+      planOrPackage: `${featureName} (+${qty} ${unit})`,
+      creditsAdded: 0,
+      creditsUsed: totalCredits,
+      amount: 0,
+      currency: 'USD',
+      currencySymbol: '$',
+      paymentMethod: 'Credits Balance',
+      methodCode: 'credits',
+      status: 'Successful',
+      referenceId: `REF-TOP-${Math.floor(100000 + Math.random() * 900000)}`
+    });
+
+    // Synchronously update userSubscription so limits reflect immediately!
+    setUserSubscription((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      if (featureId === 'copilot') {
+        updated.copilotLimit = (Number(prev.copilotLimit) || 30) + (qty * 60);
+      } else if (featureId === 'voice') {
+        updated.voiceLimit = (Number(prev.voiceLimit) || 10) + (qty * 60);
+      } else if (featureId === 'notetaker') {
+        updated.notetakerLimit = (Number(prev.notetakerLimit) || 30) + (qty * 60);
+      }
+      return updated;
+    });
+
+    setUserAvailableCredits(getStoredCredits());
+    setFeatureUsage(getFeatureUsage());
+    setDownloadStatus(getDownloadStatus());
+    setTopUpConfirmModal(null);
+    if (showToast) {
+      showToast(`🎉 Successfully you added +${qty} ${unit} to your current plan!`);
+    }
+  };
+
+  const handleProceedPaymentMethodFromModal = () => {
+    if (!topUpConfirmModal) return;
+    const { featureId, featureName, unit, qty, totalCredits, totalUSD } = topUpConfirmModal;
+
+    setCustomCheckoutTitle(`Top Up ${featureName} (+${qty} ${unit})`);
+    setTopUpSuccessCallback(() => () => {
+      recordTopUpSuccess({
+        featureId,
+        featureName,
+        quantity: qty,
+        unit,
+        creditsRequired: totalCredits,
+        amountUSD: totalUSD,
+        currency: 'USD',
+        currencySymbol: '$',
+        paymentType: 'credits',
+        paymentMethod: 'Payment Gateway',
+        planTier: userSubscription?.tier || userSubscription?.planId || 'FREE'
+      });
+      addTransactionRecord({
+        type: 'Quota Top-up',
+        planOrPackage: `${featureName} (+${qty} ${unit})`,
+        creditsAdded: 0,
+        creditsUsed: totalCredits,
+        amount: 0,
+        currency: 'USD',
+        currencySymbol: '$',
+        paymentMethod: 'Payment Gateway',
+        methodCode: 'gateway',
+        status: 'Successful',
+        referenceId: `REF-TOP-${Math.floor(100000 + Math.random() * 900000)}`
+      });
+
+      setUserSubscription((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        if (featureId === 'copilot') {
+          updated.copilotLimit = (Number(prev.copilotLimit) || 30) + (qty * 60);
+        } else if (featureId === 'voice') {
+          updated.voiceLimit = (Number(prev.voiceLimit) || 10) + (qty * 60);
+        } else if (featureId === 'notetaker') {
+          updated.notetakerLimit = (Number(prev.notetakerLimit) || 30) + (qty * 60);
+        }
+        return updated;
+      });
+
+      setUserAvailableCredits(getStoredCredits());
+      setFeatureUsage(getFeatureUsage());
+      setDownloadStatus(getDownloadStatus());
+      if (showToast) {
+        showToast(`🎉 Successfully you added +${qty} ${unit} to your current plan!`);
+      }
+    });
+
+    setTargetCheckoutCredits(totalCredits);
+    setCreditTopUpAmount(Math.max(1, Math.round(totalUSD * 100) / 100));
+    setCheckoutType('credits');
+    setTopUpConfirmModal(null);
+    setCheckoutModalOpen(true);
+  };
+
+  // Pay As You Go & Buy Credits Widget State
+  const [selectedCreditPreset, setSelectedCreditPreset] = useState(10);
+  const [payAsYouGoAmount, setPayAsYouGoAmount] = useState(() => (currency === 'INR' ? '835' : '10'));
+  const [customCreditAmount, setCustomCreditAmount] = useState(() => (currency === 'INR' ? '835' : '10'));
+
+  // Keep displayed amount in sync with currency switching without mutating the original base price
+  useEffect(() => {
+    if (selectedCreditPreset !== 'custom') {
+      const converted = currency === 'USD' ? selectedCreditPreset : Math.round(convertFromUSD(selectedCreditPreset, currency));
+      setPayAsYouGoAmount(String(converted));
+      setCustomCreditAmount(String(converted));
+    }
+  }, [currency, selectedCreditPreset]);
+
+  // Calculate credits based on amount in selected currency using live exchange rate
+  const calculateCredits = useCallback((amt) => {
+    const num = Number(amt) || 0;
+    const amountInUSD = convertToUSD(num, currency);
+    return Math.max(0, Math.round(amountInUSD * CREDITS_PER_USD));
+  }, [currency]);
+
+  const activeTotalCredits = selectedCreditPreset === 'custom'
+    ? calculateCredits(customCreditAmount)
+    : Math.round(selectedCreditPreset * CREDITS_PER_USD);
+
+  const activeAmount = selectedCreditPreset === 'custom'
+    ? (Number(customCreditAmount) || 0)
+    : (currency === 'USD' ? selectedCreditPreset : Math.round(convertFromUSD(selectedCreditPreset, currency)));
+
+  const handleSelectPreset = (presetUSD) => {
+    setSelectedCreditPreset(presetUSD);
+    if (presetUSD === 'custom') {
+      const defaultCustom = currency === 'USD' ? '100' : String(Math.round(convertFromUSD(100, currency)));
+      setPayAsYouGoAmount(customCreditAmount || defaultCustom);
+    } else {
+      const converted = currency === 'USD' ? presetUSD : Math.round(convertFromUSD(presetUSD, currency));
+      setPayAsYouGoAmount(String(converted));
+      setCustomCreditAmount(String(converted));
+    }
+  };
+
+
+  const handleOpenBuyCredits = (amt) => {
+    let amountUSD = 10;
+    if (selectedCreditPreset !== 'custom') {
+      amountUSD = selectedCreditPreset;
+    } else {
+      const val = Number(amt !== undefined ? amt : customCreditAmount) || 0;
+      amountUSD = convertToUSD(val, currency);
+    }
+    setCustomCheckoutTitle('Buy Credits Checkout');
+    setTopUpSuccessCallback(null);
+    setTargetCheckoutCredits(null);
+    setCreditTopUpAmount(Math.max(1, Math.round(amountUSD * 100) / 100));
+    setCheckoutType('credits');
+    setCheckoutModalOpen(true);
+  };
+
+  // Fetch live plans from Backend (Dynamic Source of Truth)
+  const fetchPlans = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/plans`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.plans && Array.isArray(data.plans)) {
+          // Synchronize external pricing and limit config with live API plans
+          updateSubscriptionPricing(data.plans);
+          updateDynamicPlanLimits(data.plans);
+
+          // Merge incoming plans with standard base plans so Free, Pro, and Pro Plus are always guaranteed
+          const planMap = new Map();
+          FALLBACK_PLANS.forEach((p, index) => {
+            planMap.set(p.id, { ...p, displayOrder: index + 1 });
+          });
+
+          data.plans.forEach(backendPlan => {
+            const existing = planMap.get(backendPlan.id) || {};
+            // DO NOT OVERWRITE BACKEND PRICE WITH HARDCODED SUBSCRIPTION_PRICING
+            const priceMonthly = (backendPlan.priceMonthly !== undefined && backendPlan.priceMonthly !== null)
+              ? Number(backendPlan.priceMonthly)
+              : (existing.priceMonthly ?? 0);
+
+            const priceAnnual = (backendPlan.priceAnnual !== undefined && backendPlan.priceAnnual !== null)
+              ? Number(backendPlan.priceAnnual)
+              : (backendPlan.priceYearly !== undefined && backendPlan.priceYearly !== null)
+                ? Number(backendPlan.priceYearly)
+                : (backendPlan.annualPrice !== undefined && backendPlan.annualPrice !== null)
+                  ? Number(backendPlan.annualPrice)
+                  : null;
+
+            let dynamicFeatures = existing.features;
+            if (backendPlan.customFeatures) {
+              try {
+                const parsed = typeof backendPlan.customFeatures === 'string'
+                  ? JSON.parse(backendPlan.customFeatures)
+                  : backendPlan.customFeatures;
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  dynamicFeatures = parsed;
+                }
+              } catch (_) {}
+            }
+
+            planMap.set(backendPlan.id, {
+              ...existing,
+              ...backendPlan,
+              name: backendPlan.name || existing.name || `${backendPlan.id} Plan`,
+              priceMonthly,
+              priceAnnual,
+              features: dynamicFeatures,
+              copilotMinutes: Number(backendPlan.copilotMinutes ?? existing.copilotMinutes ?? 30),
+              notetakerMinutes: Number(backendPlan.notetakerMinutes ?? existing.notetakerMinutes ?? 30),
+              voiceMinutes: Number(backendPlan.voiceMinutes ?? existing.voiceMinutes ?? 10),
+              uploadHours: Number(backendPlan.uploadHours ?? existing.uploadHours ?? 0),
+              uploadMaxMb: Number(backendPlan.uploadMaxMb ?? existing.uploadMaxMb ?? 100),
+              storageDays: Number(backendPlan.storageDays ?? existing.storageDays ?? 7),
+              downloadLimit: Number(backendPlan.downloadLimit ?? backendPlan.downloadsIncluded ?? existing.downloadLimit ?? 2),
+              includedCredits: Number(backendPlan.includedCredits ?? existing.includedCredits ?? 30)
+            });
+          });
+
+          const merged = Array.from(planMap.values()).sort(
+            (a, b) => (a.displayOrder || 0) - (b.displayOrder || 0)
+          );
+          setPlans(merged);
+        }
+      }
+    } catch (err) {
+      console.warn('Using fallback plans:', err.message);
+    }
+  }, []);
+
+  // Fetch user limits and active plan status dynamically from API
+  const fetchUserSubscription = useCallback(async () => {
+    const currentStoredTier = getActiveUserPlanTier();
+    const activePlanObj = BASE_PLANS.find(p => p.id === currentStoredTier) || BASE_PLANS[0];
+
+    const fallbackSub = {
+      tier: activePlanObj.id,
+      planId: activePlanObj.id,
+      planName: activePlanObj.name,
+      copilotLimit: activePlanObj.copilotMinutes || (activePlanObj.id === 'FREE' ? 30 : 600),
+      notetakerLimit: activePlanObj.notetakerMinutes || (activePlanObj.id === 'FREE' ? 30 : 900),
+      voiceLimit: activePlanObj.voiceMinutes || (activePlanObj.id === 'FREE' ? 10 : 90),
+      uploadMaxMbLimit: activePlanObj.uploadMaxMb || (activePlanObj.id === 'FREE' ? 100 : 500),
+      storageDays: activePlanObj.storageDays || (activePlanObj.id === 'FREE' ? 7 : 60),
+      copilotMinutesUsed: getCopilotMinutesUsed(),
+      notetakerMinutesUsed: 0,
+      voiceMinutesUsed: getVoiceMinutesUsed(),
+      uploadHoursUsed: 0,
+      isExpired: false,
+      endDate: activePlanObj.id === 'FREE' ? null : new Date(Date.now() + 30 * 86400000).toISOString()
+    };
+
+    try {
+      const headers = { 'x-suppress-auth-redirect': 'true' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`${API_BASE}/api/user/subscription-limits`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.subscription) {
+          setUserSubscription(data.subscription);
+          if (data.subscription.tier) {
+            setActiveUserPlanTier(data.subscription.tier);
+          }
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Subscription fetch notice:', err.message);
+    }
+    setUserSubscription(fallbackSub);
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => {
+    fetchPlans();
+    fetchUserSubscription();
+
+    const handlePlanTierSync = (e) => {
+      const newTier = e.detail || getActiveUserPlanTier();
+      const planObj = BASE_PLANS.find(p => p.id === newTier) || BASE_PLANS[1];
+      setUserSubscription((prev) => ({
+        ...prev,
+        tier: planObj.id,
+        planId: planObj.id,
+        planName: planObj.name
+      }));
+    };
+    window.addEventListener('copilot-plan-tier-updated', handlePlanTierSync);
+    return () => window.removeEventListener('copilot-plan-tier-updated', handlePlanTierSync);
+  }, [fetchPlans, fetchUserSubscription]);
+
+  // Handle Stripe / payment gateway return URL query params (?session_id, ?payment_status, ?canceled)
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionId = urlParams.get('session_id');
+      const paymentStatus = urlParams.get('payment_status');
+      const returnWindow = urlParams.get('window');
+
+      const isCanceled =
+        urlParams.get('canceled') === 'true' ||
+        paymentStatus === 'cancelled' ||
+        paymentStatus === 'cancel';
+
+      const isSubscriptionReturn = returnWindow === 'subscription';
+
+      if (isCanceled) {
+        if (showToast) {
+          showToast('⚠️ Payment was cancelled. No charges were made.');
+        }
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } else if (sessionId || paymentStatus === 'success' || isSubscriptionReturn) {
+        // Do NOT assume returning from Stripe means success: verify with backend
+        if (showToast) {
+          showToast('🔄 Checking payment and account status with server...');
+        }
+        Promise.all([
+          fetchUserSubscription(),
+          fetchCreditBalance()
+        ]).then(() => {
+          if (showToast) {
+            showToast('âœ… Payment status and credit balance verified.');
+          }
+        });
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch (_) {}
+  }, [fetchUserSubscription, showToast]);
+
+  const getUpgradePricing = useCallback((plan) => {
+    if (!plan) return { monthlyRate: 0, totalDue: 0, periodLabel: '', billingPeriod: '/ month' };
+    const baseMonthly = Number(plan.priceMonthly) || 0;
+    const isYearly = billingCycle === 'yearly';
+
+    const annualTotalUSD = (plan.priceAnnual !== undefined && plan.priceAnnual !== null)
+      ? Number(plan.priceAnnual)
+      : (plan.priceYearly !== undefined && plan.priceYearly !== null)
+        ? Number(plan.priceYearly)
+        : (plan.annualPrice !== undefined && plan.annualPrice !== null)
+          ? Number(plan.annualPrice)
+          : Math.round(baseMonthly * 12 * 0.8);
+
+    const monthlyRateUSD = isYearly ? Math.round(annualTotalUSD / 12) : baseMonthly;
+    const totalUSD = isYearly ? annualTotalUSD : baseMonthly;
+
+    const convertedMonthly = convertFromUSD(monthlyRateUSD, currency);
+    const convertedTotal = convertFromUSD(totalUSD, currency);
+    const periodLabel = isYearly ? 'Annual Billing (Save 20%)' : 'Monthly Billing';
+    const billingPeriod = isYearly ? '/ year' : '/ month';
+
+    return {
+      monthlyRate: convertedMonthly,
+      totalDue: convertedTotal,
+      monthlyRateUSD,
+      totalUSD,
+      periodLabel,
+      billingPeriod
+    };
+  }, [billingCycle, currency]);
+
+  const handleUpgrade = (plan) => {
+    // FREE PLAN REQUIREMENT: Zero payment required, activates directly without payment modal
+    const isFree =
+      !plan ||
+      String(plan.id || '').toUpperCase() === 'FREE' ||
+      String(plan.tier || '').toUpperCase() === 'FREE' ||
+      Number(plan.priceMonthly) === 0 ||
+      (plan.name && plan.name.toLowerCase().includes('free'));
+
+    if (isFree) {
+      const freePlanObj = plans.find(p => p.id === 'FREE') || plan;
+      setActiveUserPlanTier('FREE');
+      setUserSubscription((prev) => ({
+        ...prev,
+        tier: 'FREE',
+        planId: 'FREE',
+        planName: freePlanObj?.name || 'Free Plan',
+        copilotLimit: freePlanObj?.copilotMinutes || 30,
+        notetakerLimit: freePlanObj?.notetakerMinutes || 30,
+        voiceLimit: freePlanObj?.voiceMinutes || 10,
+        uploadMaxMbLimit: freePlanObj?.uploadMaxMb || 100,
+        storageDays: freePlanObj?.storageDays || 7,
+        copilotMinutesUsed: 0,
+        notetakerMinutesUsed: 0,
+        voiceMinutesUsed: 0,
+        uploadHoursUsed: 0,
+        isExpired: false,
+        endDate: new Date(Date.now() + 365 * 86400000).toISOString()
+      }));
+      setCheckoutModalOpen(false);
+      setSelectedCheckoutPlan(null);
+      if (token) {
+        fetch(`${API_BASE}/api/user/upgrade`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-suppress-auth-redirect': 'true',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ tier: 'FREE', durationDays: 365 })
+        }).catch(() => {});
+      }
+      if (showToast) {
+        showToast('🎉 Free Plan activated successfully! No payment required.');
+      }
+      return;
+    }
+
+    // PAID PLANS (Pro, Pro Plus): Prompt for payment / credits checkout
+    setSelectedCheckoutPlan(plan);
+    setCheckoutType('subscription');
+    setCheckoutModalOpen(true);
+  };
+
+  const handlePaymentSuccess = async (receipt) => {
+    if (receipt.type === 'subscription' && receipt.plan) {
+      const targetPlan = plans.find((p) => p.id === receipt.plan.id) || receipt.plan;
+
+      // Update local storage and reactive store immediately
+      setActiveUserPlanTier(targetPlan.id);
+
+      setUserSubscription((prev) => ({
+        ...prev,
+        tier: targetPlan.id,
+        planId: targetPlan.id,
+        planName: targetPlan.name,
+        copilotLimit: targetPlan.copilotMinutes ?? (targetPlan.id === 'PRO_PLUS' ? 2400 : 600),
+        notetakerLimit: targetPlan.notetakerMinutes ?? (targetPlan.id === 'PRO_PLUS' ? 3000 : 900),
+        voiceLimit: targetPlan.voiceMinutes ?? (targetPlan.id === 'PRO_PLUS' ? 300 : 90),
+        uploadMaxMbLimit: targetPlan.uploadMaxMb ?? (targetPlan.id === 'PRO_PLUS' ? 2048 : 500),
+        storageDays: targetPlan.storageDays ?? (targetPlan.id === 'PRO_PLUS' ? -1 : 60),
+        isExpired: false,
+        endDate: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 86400000).toISOString()
+      }));
+
+      // Refresh backend limits and sync
+      if (token) {
+        try {
+          await fetch(`${API_BASE}/api/user/upgrade`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-suppress-auth-redirect': 'true',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              tier: targetPlan.id,
+              durationDays: billingCycle === 'yearly' ? 365 : 30
+            })
+          });
+        } catch (_) {}
+      }
+
+      // Re-fetch backend subscription limits to confirm
+      fetchUserSubscription();
+      setUserAvailableCredits(getStoredCredits());
+      setDownloadStatus(getDownloadStatus());
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('copilot-plan-tier-updated', { detail: targetPlan.id }));
+        window.dispatchEvent(new CustomEvent('copilot-usage-updated'));
+        window.dispatchEvent(new CustomEvent('copilot-transactions-updated'));
+      }
+
+      if (showToast) {
+        showToast(`🎉 Success! Upgraded to ${targetPlan.name}.`);
+      }
+    } else if (receipt.type === 'credits') {
+      setUserAvailableCredits(getStoredCredits());
+      setDownloadStatus(getDownloadStatus());
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('copilot-usage-updated'));
+        window.dispatchEvent(new CustomEvent('copilot-transactions-updated'));
+      }
+
+      if (showToast) {
+        showToast(`🎉 Success! ${receipt.creditsAdded?.toLocaleString() || ''} credits added to your account.`);
+      }
+    }
+  };
+
+  const currentTier = userSubscription?.tier || getActiveUserPlanTier() || 'FREE';
+  const subStatus = (() => {
+    if (userSubscription?.isExpired || userSubscription?.status === 'expired') return 'expired';
+    if (userSubscription?.status === 'cancelled' || userSubscription?.status === 'canceled') return 'cancelled';
+    if (userSubscription?.status === 'inactive') return 'inactive';
+    if (userSubscription?.endDate) {
+      const end = new Date(userSubscription.endDate);
+      if (end.getTime() < Date.now()) return 'expired';
+    }
+    return 'active';
+  })();
+
+  const isCurrentPlan = (planId) => {
+    return currentTier.toUpperCase() === String(planId).toUpperCase();
+  };
+
+  return (
+    <div className={`subscription-page-root ${darkMode ? 'dark-theme' : ''}`}>
+      {/* Top Navbar */}
+      <header className="sub-top-nav">
+        <div className="sub-nav-left">
+          <button className="sub-back-btn" onClick={onBack} title="Back to Home">
+            <i className="fa-solid fa-arrow-left"></i>
+            <span>Back</span>
+          </button>
+          <div className="sub-brand-tag">
+            <i className="fa-solid fa-bolt"></i>
+            <span>My Interview Copilot</span>
+          </div>
+        </div>
+
+        <div className="sub-nav-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            className="sub-history-nav-btn"
+            onClick={() => setHistoryModalOpen(true)}
+            title="View Plan Validity & Payment History"
+          >
+            <i className="fa-solid fa-clock-rotate-left"></i>
+            <span>History</span>
+          </button>
+          <GlobalCurrencySelector
+            selectedCurrency={currency}
+            onSelectCurrency={setCurrency}
+            compact={true}
+            darkMode={darkMode}
+          />
+          <button
+            className="theme-toggle-btn"
+            onClick={toggleDarkMode}
+            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            <i className={`fa-solid ${darkMode ? 'fa-sun' : 'fa-moon'}`}></i>
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="sub-scroll-container">
+        {/* Hero Section */}
+        <section className="sub-hero">
+          <span className="sub-hero-badge">Transparent Plans &amp; Live Quotas</span>
+          <h1>Supercharge Your Interview Readiness</h1>
+          <p>
+            Choose the right level of real-time AI assistance, interview simulation, and meeting
+            intelligence. Changes made in the system reflect immediately with zero downtime.
+          </p>
+
+          {/* Billing Cycle Toggle */}
+          <div className="sub-billing-toggle">
+            <button
+              className={`toggle-pill ${billingCycle === 'monthly' ? 'active' : ''}`}
+              onClick={() => setBillingCycle('monthly')}
+            >
+              Monthly Billing
+            </button>
+            <button
+              className={`toggle-pill ${billingCycle === 'yearly' ? 'active' : ''}`}
+              onClick={() => setBillingCycle('yearly')}
+            >
+              Annual Billing
+              <span className="save-discount-badge">Save 20%</span>
+            </button>
+          </div>
+        </section>
+
+        {/* Current Plan & Usage Limits Section */}
+        <section className="current-plan-card">
+          <div className="current-plan-header">
+            <div className="current-tier-info">
+              <span className={`tier-badge badge-${currentTier.toLowerCase()}`}>
+                <i className="fa-solid fa-award" style={{ marginRight: '6px' }}></i>
+                {userSubscription?.planName || `${currentTier} Plan`}
+              </span>
+              <span className={`sub-status-pill ${subStatus}`}>
+                {subStatus === 'active' && <><i className="fa-solid fa-circle-check"></i> Active</>}
+                {subStatus === 'expired' && <><i className="fa-solid fa-triangle-exclamation"></i> Expired</>}
+                {subStatus === 'cancelled' && <><i className="fa-solid fa-ban"></i> Cancelled</>}
+                {subStatus === 'inactive' && <><i className="fa-solid fa-pause"></i> Inactive</>}
+              </span>
+              <span className="tier-status-text">
+                {subStatus === 'expired' ? (
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                    Plan Expired &mdash; Please Renew to restore full limits
+                  </span>
+                ) : subStatus === 'cancelled' ? (
+                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>
+                    Subscription Cancelled &mdash; Reactivate anytime
+                  </span>
+                ) : subStatus === 'inactive' ? (
+                  <span style={{ color: '#94a3b8', fontWeight: 600 }}>
+                    Subscription Inactive &mdash; Select a plan to activate
+                  </span>
+                ) : userSubscription?.endDate ? (
+                  `Active until ${new Date(userSubscription.endDate).toLocaleDateString()}`
+                ) : (
+                  'Free One-Time Trial Account'
+                )}
+              </span>
+            </div>
+
+            <div className="current-plan-header-right" style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <div
+                className="header-credits-pill clickable"
+                onClick={() => handleOpenBuyCredits(10)}
+                title="Click to Buy More Credits"
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="fa-solid fa-coins"></i>
+                <span><strong>{userAvailableCredits.toLocaleString()}</strong> Available Credits</span>
+                <i className="fa-solid fa-circle-plus" style={{ marginLeft: '4px', fontSize: '11px', opacity: 0.8 }}></i>
+              </div>
+
+              {subStatus === 'expired' && (
+                <button
+                  className="plan-cta-btn primary"
+                  style={{ width: 'auto', padding: '8px 20px', fontSize: '14px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' }}
+                  onClick={() => {
+                    const targetPlan = plans.find((p) => p.id === currentTier) || plans[1];
+                    if (targetPlan) handleUpgrade(targetPlan);
+                  }}
+                >
+                  <i className="fa-solid fa-rotate"></i>
+                  Renew Subscription
+                </button>
+              )}
+
+              {subStatus === 'cancelled' && (
+                <button
+                  className="plan-cta-btn primary"
+                  style={{ width: 'auto', padding: '8px 20px', fontSize: '14px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}
+                  onClick={() => {
+                    const targetPlan = plans.find((p) => p.id === 'PRO') || plans[1];
+                    if (targetPlan) handleUpgrade(targetPlan);
+                  }}
+                >
+                  <i className="fa-solid fa-arrow-rotate-left"></i>
+                  Reactivate Plan
+                </button>
+              )}
+
+              {subStatus === 'inactive' && (
+                <button
+                  className="plan-cta-btn primary"
+                  style={{ width: 'auto', padding: '8px 20px', fontSize: '14px' }}
+                  onClick={() => {
+                    const targetPlan = plans.find((p) => p.id === 'PRO') || plans[1];
+                    if (targetPlan) handleUpgrade(targetPlan);
+                  }}
+                >
+                  <i className="fa-solid fa-bolt"></i>
+                  Activate Plan
+                </button>
+              )}
+
+              {subStatus === 'active' && currentTier === 'FREE' && (
+                <button
+                  className="plan-cta-btn primary"
+                  style={{ width: 'auto', padding: '8px 20px', fontSize: '14px' }}
+                  onClick={() => {
+                    const proPlan = plans.find((p) => p.id === 'PRO') || plans[1];
+                    if (proPlan) handleUpgrade(proPlan);
+                  }}
+                >
+                  <i className="fa-solid fa-sparkles"></i>
+                  Upgrade to Pro
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Integrated Quota & Credit Top-Up Grid (Sections 1 to 5 directly in top portion) */}
+          <div className="quota-grid integrated-topup-grid">
+            {/* 1. File Downloads */}
+            {(() => {
+              const baseDownloads = downloadStatus.limit === -1 ? 9999 : downloadStatus.limit;
+              const toppedUpDownloads = featureUsage.downloads?.toppedUp || 0;
+              const totalLimit = downloadStatus.limit === -1 ? 'Unlimited' : (baseDownloads + toppedUpDownloads);
+              const used = downloadStatus.used;
+              const qty = topUpQuantities.downloads || 5;
+              const rateCredits = 25;
+              const rateUSD = 0.10;
+              const totalCostCredits = qty * rateCredits;
+              const totalCostUSD = (qty * rateUSD).toFixed(2);
+              const progressPct = downloadStatus.limit === -1 ? 15 : Math.min(100, Math.round((used / Math.max(1, (baseDownloads + toppedUpDownloads))) * 100));
+
+              return (
+                <div className="quota-topup-card" key="downloads-card">
+                  <div className="quota-card-top">
+                    <div className="quota-card-header">
+                      <div className="quota-card-icon-title">
+                        <div className="quota-icon-wrap" style={{ background: 'rgba(14, 165, 233, 0.15)', color: '#0ea5e9' }}>
+                          <i className="fa-solid fa-file-arrow-down"></i>
+                        </div>
+                        <div>
+                          <h4 className="quota-card-title">File Downloads</h4>
+                          <span className="quota-plan-tag">
+                            <i className="fa-solid fa-circle-info"></i> {downloadStatus.limit === -1 ? 'Unlimited in your plan' : `${downloadStatus.limit} included in your plan`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="quota-card-desc">
+                      Download transcripts, executive PDF summaries, and audio recordings using credits.
+                    </p>
+
+                    <div className="quota-allocation-box">
+                      <div className="allocation-header-row">
+                        <span className="alloc-label">Current Allocation:</span>
+                        <span className="alloc-numbers">
+                          <strong>{used}</strong> / {totalLimit} Downloads used
+                        </span>
+                      </div>
+                      {toppedUpDownloads > 0 && (
+                        <div className="topped-prev-badge">
+                          <i className="fa-solid fa-plus"></i> {toppedUpDownloads} Downloads topped up previously
+                        </div>
+                      )}
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="quota-topup-controls-block">
+                    <div className="quota-rate-row">
+                      <span className="rate-text-label">Rate: per Download:</span>
+                      <span className="rate-badge"><strong>{rateCredits} Credits</strong> (${rateUSD} USD)</span>
+                    </div>
+
+                    <div className="select-quantity-label">Select Additional Downloads:</div>
+                    <div className="stepper-and-presets-row">
+                      <div className="quota-stepper">
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('downloads', -1)}
+                          disabled={qty <= 1}
+                        >
+                          <i className="fa-solid fa-minus"></i>
+                        </button>
+                        <span className="stepper-value">
+                          <strong>{qty}</strong> <span className="stepper-unit">Downloads</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('downloads', 1)}
+                        >
+                          <i className="fa-solid fa-plus"></i>
+                        </button>
+                      </div>
+
+                      <div className="quota-quick-pills">
+                        {[1, 2, 5, 10].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`quick-pill ${qty === preset ? 'active' : ''}`}
+                            onClick={() => handleSetExactQuantity('downloads', preset)}
+                          >
+                            +{preset} Downloads
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="quota-calc-summary-row">
+                      <span className="calc-left">
+                        {qty} Downloads &times; {rateCredits} Credits
+                        <div className="calc-credits-total">
+                          <i className="fa-solid fa-coins"></i> {totalCostCredits} Credits
+                        </div>
+                      </span>
+                      <span className="calc-right">
+                        <span className="calc-usd-label">TOTAL AMOUNT</span>
+                        <span className="calc-usd-value">${totalCostUSD} USD</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="quota-action-topup-btn"
+                      onClick={() => handleExecuteTopUp('downloads', 'File Downloads', 'Downloads', rateCredits, rateUSD)}
+                    >
+                      <span>Top Up Now</span>
+                      <i className="fa-solid fa-arrow-right"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 2. AI Copilot */}
+            {(() => {
+              const baseHours = userSubscription?.copilotLimit ? (userSubscription.copilotLimit / 60) : (currentTier === 'FREE' ? 0.5 : (currentTier === 'PRO' ? 10 : 40));
+              const baseMinutes = Math.round(baseHours * 60);
+              const toppedUpHours = featureUsage.copilot?.toppedUp || 0;
+              const totalHours = baseHours + toppedUpHours;
+              const totalMinutes = Math.round(totalHours * 60);
+
+              const usedHours = featureUsage.copilot?.used !== undefined ? featureUsage.copilot.used : (currentTier === 'FREE' ? 0.5 : 6);
+              const usedMinutes = Math.round(usedHours * 60);
+
+              const qty = topUpQuantities.copilot || 1;
+              const rateCredits = 50; // Strict User Audio Requirement: 1 Hour = 50 Credits ($1 USD)
+              const rateUSD = (1.00).toFixed(2);
+              const totalCostCredits = qty * 50;
+              const totalCostUSD = (qty * 1.00).toFixed(2);
+              const progressPct = Math.min(100, Math.round((usedHours / Math.max(0.1, totalHours)) * 100));
+
+              return (
+                <div className="quota-topup-card" key="copilot-card">
+                  <div className="quota-card-top">
+                    <div className="quota-card-header">
+                      <div className="quota-card-icon-title">
+                        <div className="quota-icon-wrap" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+                          <i className="fa-solid fa-robot"></i>
+                        </div>
+                        <div>
+                          <h4 className="quota-card-title">AI Copilot</h4>
+                          <span className="quota-plan-tag">
+                            <i className="fa-solid fa-circle-info"></i> {baseHours >= 1 ? `${Number.isInteger(baseHours) ? baseHours : baseHours.toFixed(1)} hours (${baseMinutes} mins) included in your plan` : `${baseMinutes} mins included in your plan`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="quota-card-desc">
+                      Real-time AI voice &amp; teleprompter guidance during technical and behavioral interviews.
+                    </p>
+
+                    <div className="quota-allocation-box">
+                      <div className="allocation-header-row">
+                        <span className="alloc-label">Current Allocation:</span>
+                        <span className="alloc-numbers">
+                          <strong>{usedMinutes >= 60 ? `${usedHours.toFixed(1)} hrs` : `${usedMinutes} mins`}</strong>
+                          {' '}/ {totalHours >= 1 ? `${Number.isInteger(totalHours) ? totalHours : totalHours.toFixed(1)} hrs (${totalMinutes} mins)` : `${totalMinutes} mins`} used
+                        </span>
+                      </div>
+                      {toppedUpHours > 0 && (
+                        <div className="topped-prev-badge">
+                          <i className="fa-solid fa-plus"></i> +{toppedUpHours} {toppedUpHours === 1 ? 'Hour' : 'Hours'} ({toppedUpHours * 60} mins) topped up
+                        </div>
+                      )}
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8)' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="quota-topup-controls-block">
+                    <div className="quota-rate-row">
+                      <span className="rate-text-label">Rate: per Hour:</span>
+                      <span className="rate-badge"><strong>{rateCredits} Credits</strong> (${rateUSD} USD)</span>
+                    </div>
+
+                    <div className="select-quantity-label">Select Additional Hours:</div>
+                    <div className="stepper-and-presets-row">
+                      <div className="quota-stepper">
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('copilot', -1)}
+                          disabled={qty <= 1}
+                        >
+                          <i className="fa-solid fa-minus"></i>
+                        </button>
+                        <span className="stepper-value">
+                          <strong>{qty}</strong> <span className="stepper-unit">Hours</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('copilot', 1)}
+                        >
+                          <i className="fa-solid fa-plus"></i>
+                        </button>
+                      </div>
+
+                      <div className="quota-quick-pills">
+                        {[1, 2, 3, 5].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`quick-pill ${qty === preset ? 'active' : ''}`}
+                            onClick={() => handleSetExactQuantity('copilot', preset)}
+                          >
+                            +{preset} {preset === 1 ? 'hr' : 'hrs'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="quota-calc-summary-row">
+                      <span className="calc-left">
+                        {qty} {qty === 1 ? 'Hour' : 'Hours'} &times; {rateCredits} Credits
+                        <div className="calc-credits-total">
+                          <i className="fa-solid fa-coins"></i> {totalCostCredits} Credits
+                        </div>
+                      </span>
+                      <span className="calc-right">
+                        <span className="calc-usd-label">TOTAL AMOUNT</span>
+                        <span className="calc-usd-value">${totalCostUSD} USD</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="quota-action-topup-btn"
+                      onClick={() => handleExecuteTopUp('copilot', 'AI Copilot', 'Hours', rateCredits, Number(rateUSD))}
+                    >
+                      <span>Top Up Now</span>
+                      <i className="fa-solid fa-arrow-right"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 3. Voice Simulator */}
+            {(() => {
+              const baseHours = userSubscription?.voiceLimit ? (userSubscription.voiceLimit / 60) : (currentTier === 'FREE' ? 0.16 : (currentTier === 'PRO' ? 1.5 : 5));
+              const baseMinutes = Math.round(baseHours * 60);
+              const toppedUpHours = featureUsage.voice?.toppedUp || 0;
+              const totalHours = baseHours + toppedUpHours;
+              const totalMinutes = Math.round(totalHours * 60);
+
+              const usedHours = featureUsage.voice?.used !== undefined ? featureUsage.voice.used : (currentTier === 'FREE' ? 0.16 : 1.5);
+              const usedMinutes = Math.round(usedHours * 60);
+
+              const qty = topUpQuantities.voice || 1;
+              const rateCredits = 50; // Strict User Audio Requirement: 1 Hour = 50 Credits ($1 USD)
+              const rateUSD = (1.00).toFixed(2);
+              const totalCostCredits = qty * 50;
+              const totalCostUSD = (qty * 1.00).toFixed(2);
+              const progressPct = Math.min(100, Math.round((usedHours / Math.max(0.1, totalHours)) * 100));
+
+              return (
+                <div className="quota-topup-card" key="voice-card">
+                  <div className="quota-card-top">
+                    <div className="quota-card-header">
+                      <div className="quota-card-icon-title">
+                        <div className="quota-icon-wrap" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+                          <i className="fa-solid fa-microphone-lines"></i>
+                        </div>
+                        <div>
+                          <h4 className="quota-card-title">Voice Simulator</h4>
+                          <span className="quota-plan-tag">
+                            <i className="fa-solid fa-circle-info"></i> {baseHours >= 1 ? `${Number.isInteger(baseHours) ? baseHours : baseHours.toFixed(1)} hours (${baseMinutes} mins) included in your plan` : `${baseMinutes} mins included in your plan`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="quota-card-desc">
+                      Interactive spoken voice-to-voice mock interview rehearsals with instant feedback.
+                    </p>
+
+                    <div className="quota-allocation-box">
+                      <div className="allocation-header-row">
+                        <span className="alloc-label">Current Allocation:</span>
+                        <span className="alloc-numbers">
+                          <strong>{usedMinutes >= 60 ? `${usedHours.toFixed(1)} hrs` : `${usedMinutes} mins`}</strong>
+                          {' '}/ {totalHours >= 1 ? `${Number.isInteger(totalHours) ? totalHours : totalHours.toFixed(1)} hrs (${totalMinutes} mins)` : `${totalMinutes} mins`} used
+                        </span>
+                      </div>
+                      {toppedUpHours > 0 && (
+                        <div className="topped-prev-badge">
+                          <i className="fa-solid fa-plus"></i> +{toppedUpHours} {toppedUpHours === 1 ? 'Hour' : 'Hours'} ({toppedUpHours * 60} mins) topped up
+                        </div>
+                      )}
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, #0284c7, #38bdf8)' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="quota-topup-controls-block">
+                    <div className="quota-rate-row">
+                      <span className="rate-text-label">Rate: per Hour:</span>
+                      <span className="rate-badge"><strong>{rateCredits} Credits</strong> (${rateUSD} USD)</span>
+                    </div>
+
+                    <div className="select-quantity-label">Select Additional Hours:</div>
+                    <div className="stepper-and-presets-row">
+                      <div className="quota-stepper">
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('voice', -1)}
+                          disabled={qty <= 1}
+                        >
+                          <i className="fa-solid fa-minus"></i>
+                        </button>
+                        <span className="stepper-value">
+                          <strong>{qty}</strong> <span className="stepper-unit">Hours</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('voice', 1)}
+                        >
+                          <i className="fa-solid fa-plus"></i>
+                        </button>
+                      </div>
+
+                      <div className="quota-quick-pills">
+                        {[1, 2, 3, 5].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`quick-pill ${qty === preset ? 'active' : ''}`}
+                            onClick={() => handleSetExactQuantity('voice', preset)}
+                          >
+                            +{preset} {preset === 1 ? 'hr' : 'hrs'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="quota-calc-summary-row">
+                      <span className="calc-left">
+                        {qty} {qty === 1 ? 'Hour' : 'Hours'} &times; {rateCredits} Credits
+                        <div className="calc-credits-total">
+                          <i className="fa-solid fa-coins"></i> {totalCostCredits} Credits
+                        </div>
+                      </span>
+                      <span className="calc-right">
+                        <span className="calc-usd-label">TOTAL AMOUNT</span>
+                        <span className="calc-usd-value">${totalCostUSD} USD</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="quota-action-topup-btn"
+                      onClick={() => handleExecuteTopUp('voice', 'Voice Simulator', 'Hours', rateCredits, Number(rateUSD))}
+                    >
+                      <span>Top Up Now</span>
+                      <i className="fa-solid fa-arrow-right"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 4. Notepad & Notes */}
+            {(() => {
+              const baseHours = userSubscription?.notetakerLimit ? (userSubscription.notetakerLimit / 60) : (currentTier === 'FREE' ? 0.5 : (currentTier === 'PRO' ? 15 : 50));
+              const baseMinutes = Math.round(baseHours * 60);
+              const toppedUpHours = featureUsage.notetaker?.toppedUp || 0;
+              const totalHours = baseHours + toppedUpHours;
+              const totalMinutes = Math.round(totalHours * 60);
+
+              const usedHours = featureUsage.notetaker?.used !== undefined ? featureUsage.notetaker.used : (currentTier === 'FREE' ? 0.5 : 9);
+              const usedMinutes = Math.round(usedHours * 60);
+
+              const qty = topUpQuantities.notetaker || 1;
+              const rateCredits = 50; // Strict User Audio Requirement: 1 Hour = 50 Credits ($1 USD)
+              const rateUSD = (1.00).toFixed(2);
+              const totalCostCredits = qty * 50;
+              const totalCostUSD = (qty * 1.00).toFixed(2);
+              const progressPct = Math.min(100, Math.round((usedHours / Math.max(0.5, totalHours)) * 100));
+
+              return (
+                <div className="quota-topup-card" key="notetaker-card">
+                  <div className="quota-card-top">
+                    <div className="quota-card-header">
+                      <div className="quota-card-icon-title">
+                        <div className="quota-icon-wrap" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
+                          <i className="fa-regular fa-file-lines"></i>
+                        </div>
+                        <div>
+                          <h4 className="quota-card-title">Notepad &amp; Notes</h4>
+                          <span className="quota-plan-tag">
+                            <i className="fa-solid fa-circle-info"></i> {baseHours >= 1 ? `${Number.isInteger(baseHours) ? baseHours : baseHours.toFixed(1)} hours (${baseMinutes} mins) included in your plan` : `${baseMinutes} mins included in your plan`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="quota-card-desc">
+                      Automatic meeting notes, key action items, and executive interview summaries.
+                    </p>
+
+                    <div className="quota-allocation-box">
+                      <div className="allocation-header-row">
+                        <span className="alloc-label">Current Allocation:</span>
+                        <span className="alloc-numbers">
+                          <strong>{usedMinutes >= 60 ? `${usedHours.toFixed(1)} hrs` : `${usedMinutes} mins`}</strong>
+                          {' '}/ {totalHours >= 1 ? `${Number.isInteger(totalHours) ? totalHours : totalHours.toFixed(1)} hrs (${totalMinutes} mins)` : `${totalMinutes} mins`} used
+                        </span>
+                      </div>
+                      {toppedUpHours > 0 && (
+                        <div className="topped-prev-badge">
+                          <i className="fa-solid fa-plus"></i> +{toppedUpHours} {toppedUpHours === 1 ? 'Hour' : 'Hours'} ({toppedUpHours * 60} mins) topped up
+                        </div>
+                      )}
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, #9333ea, #c084fc)' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="quota-topup-controls-block">
+                    <div className="quota-rate-row">
+                      <span className="rate-text-label">Rate: per Hour:</span>
+                      <span className="rate-badge"><strong>{rateCredits} Credits</strong> (${rateUSD} USD)</span>
+                    </div>
+
+                    <div className="select-quantity-label">Select Additional Hours:</div>
+                    <div className="stepper-and-presets-row">
+                      <div className="quota-stepper">
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('notetaker', -1)}
+                          disabled={qty <= 1}
+                        >
+                          <i className="fa-solid fa-minus"></i>
+                        </button>
+                        <span className="stepper-value">
+                          <strong>{qty}</strong> <span className="stepper-unit">Hours</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="stepper-btn"
+                          onClick={() => handleQuantityStep('notetaker', 1)}
+                        >
+                          <i className="fa-solid fa-plus"></i>
+                        </button>
+                      </div>
+
+                      <div className="quota-quick-pills">
+                        {[1, 2, 4, 8].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`quick-pill ${qty === preset ? 'active' : ''}`}
+                            onClick={() => handleSetExactQuantity('notetaker', preset)}
+                          >
+                            +{preset} {preset === 1 ? 'hr' : 'hrs'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="quota-calc-summary-row">
+                      <span className="calc-left">
+                        {qty} {qty === 1 ? 'Hour' : 'Hours'} &times; {rateCredits} Credits
+                        <div className="calc-credits-total">
+                          <i className="fa-solid fa-coins"></i> {totalCostCredits} Credits
+                        </div>
+                      </span>
+                      <span className="calc-right">
+                        <span className="calc-usd-label">TOTAL AMOUNT</span>
+                        <span className="calc-usd-value">${totalCostUSD} USD</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="quota-action-topup-btn"
+                      onClick={() => handleExecuteTopUp('notetaker', 'Notepad & Notes', 'Hours', rateCredits, Number(rateUSD))}
+                    >
+                      <span>Top Up Now</span>
+                      <i className="fa-solid fa-arrow-right"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 5. Media Upload */}
+            <div className="quota-topup-card unlimited-card" key="upload-card">
+              <div className="quota-card-top">
+                <div className="quota-card-header">
+                  <div className="quota-card-icon-title">
+                    <div className="quota-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                      <i className="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <div>
+                      <h4 className="quota-card-title">Media Upload</h4>
+                      <span className="quota-plan-tag unlimited-plan-tag">
+                        <i className="fa-solid fa-infinity"></i> Unlimited uploads for all plans (0 credits)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="quota-card-desc">
+                  High-speed audio &amp; video upload processing with speaker labels &amp; transcription.
+                </p>
+
+                <div className="quota-allocation-box">
+                  <div className="allocation-header-row">
+                    <span className="alloc-label">Current Allocation:</span>
+                    <span className="alloc-numbers">
+                      <strong>Unlimited</strong> / High-Speed Storage
+                    </span>
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: '100%', background: 'linear-gradient(90deg, #10b981, #34d399)' }}></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="quota-topup-controls-block unlimited-notice-box">
+                <div className="quota-rate-row">
+                  <span className="rate-text-label">Rate: per File:</span>
+                  <span className="rate-badge free-rate-badge"><strong>0 Credits</strong> ($0 USD)</span>
+                </div>
+
+                <div className="unlimited-perk-banner">
+                  <div className="perk-icon-star">
+                    <i className="fa-solid fa-sparkles"></i>
+                  </div>
+                  <div className="perk-text">
+                    <strong>Zero Credit Deduction</strong>
+                    <span>File uploading remains 100% free and unlimited on all plans. No top-up needed.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Dynamic Plan Cards Section (Supports Free, Pro, Pro Plus, and any new tier like Elite) */}
+        <section className="plan-cards-section">
+          <div className="section-heading-row">
+            <h2>Select Your Subscription Plan</h2>
+          </div>
+
+          <div className="plan-cards-grid">
+            {plans.filter(p => p.id !== 'ELITE').map((plan) => {
+              const isCurrent = isCurrentPlan(plan.id);
+              const isPopular =
+                plan.badge?.toLowerCase().includes('popular') || plan.id === 'PRO';
+              const isYearly = billingCycle === 'yearly';
+              const annualTotalUSD = (plan.priceAnnual !== undefined && plan.priceAnnual !== null)
+                ? Number(plan.priceAnnual)
+                : (plan.priceYearly !== undefined && plan.priceYearly !== null)
+                  ? Number(plan.priceYearly)
+                  : (plan.annualPrice !== undefined && plan.annualPrice !== null)
+                    ? Number(plan.annualPrice)
+                    : Math.round((Number(plan.priceMonthly) || 0) * 12 * 0.8);
+              const monthlyRateUSD = isYearly ? Math.round(annualTotalUSD / 12) : (Number(plan.priceMonthly) || 0);
+              const priceUSD = isYearly ? annualTotalUSD : (Number(plan.priceMonthly) || 0);
+              const convertedPrice = currency === 'USD' || priceUSD === 0
+                ? priceUSD
+                : Math.round(convertFromUSD(priceUSD, currency));
+
+              // The glowing blue border & light follows the CURRENT ACTIVE PLAN!
+              const isCardHighlighted = isCurrent || (currentTier === 'FREE' && isPopular);
+
+              return (
+                <div
+                  key={plan.id}
+                  className={`plan-card ${isCurrent ? 'active-plan-card highlighted' : isCardHighlighted ? 'highlighted' : ''}`}
+                >
+                  {isCurrent ? (
+                    <div className="plan-card-tag active-tag">
+                      <i className="fa-solid fa-circle-check"></i> CURRENT ACTIVE PLAN
+                    </div>
+                  ) : plan.badge ? (
+                    <div className="plan-card-tag">{plan.badge}</div>
+                  ) : null}
+
+                  <div className="plan-card-header">
+                    <h3 className="plan-title">{plan.name || plan.id}</h3>
+                    <div className="plan-price-row">
+                      <span className="plan-currency">{currencySymbol}</span>
+                      <span className="plan-price-num">{convertedPrice.toLocaleString()}</span>
+                      <span className="plan-period">{isYearly ? '/ year' : '/ month'}</span>
+                    </div>
+                    {isYearly && priceUSD > 0 && (
+                      <div className="plan-price-converted-sub" style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px' }}>
+                        ({currencySymbol}{convertFromUSD(monthlyRateUSD, currency).toLocaleString()} / mo billed annually)
+                        {currency !== 'USD' && ` • $${priceUSD} USD/yr base`}
+                      </div>
+                    )}
+                    {!isYearly && currency !== 'USD' && priceUSD > 0 && (
+                      <div className="plan-price-converted-sub" style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>
+                        (${priceUSD} USD base)
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Primary Feature Quotas */}
+                  <div className="plan-stats-list">
+                    <div className="plan-stat-item">
+                      <i className="fa-solid fa-robot stat-icon"></i>
+                      <span>
+                        AI Copilot:{' '}
+                        <strong className="stat-value">
+                          {plan.copilotMinutes >= 60
+                            ? `${plan.copilotMinutes / 60} hrs / mo`
+                            : `${plan.copilotMinutes} mins`}
+                        </strong>
+                      </span>
+                    </div>
+
+                    <div className="plan-stat-item">
+                      <i className="fa-solid fa-file-lines stat-icon"></i>
+                      <span>
+                        Notetaker:{' '}
+                        <strong className="stat-value">
+                          {plan.notetakerMinutes >= 60
+                            ? `${plan.notetakerMinutes / 60} hrs / mo`
+                            : `${plan.notetakerMinutes} mins`}
+                        </strong>
+                      </span>
+                    </div>
+
+                    <div className="plan-stat-item">
+                      <i className="fa-solid fa-microphone stat-icon"></i>
+                      <span>
+                        Voice Simulator:{' '}
+                        <strong className="stat-value">
+                          {plan.voiceMinutes >= 60
+                            ? `${plan.voiceMinutes / 60} hrs / mo`
+                            : `${plan.voiceMinutes} mins`}
+                        </strong>
+                      </span>
+                    </div>
+
+                    <div className="plan-stat-item">
+                      <i className="fa-solid fa-hard-drive stat-icon"></i>
+                      <span>
+                        Upload Size:{' '}
+                        <strong className="stat-value">
+                          {plan.uploadMaxMb >= 1024
+                            ? `${plan.uploadMaxMb / 1024} GB`
+                            : `${plan.uploadMaxMb} MB`}
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Key Highlights */}
+                  <div className="plan-features-list">
+                    <div
+                      className={`plan-feature-item ${
+                        !plan.hasTopBar ? 'locked' : ''
+                      }`}
+                    >
+                      <i
+                        className={`fa-solid ${
+                          plan.hasTopBar
+                            ? 'fa-check check-icon'
+                            : 'fa-lock lock-icon'
+                        }`}
+                      ></i>
+                      <span>
+                        Slim Top Bar Overlay{' '}
+                        {!plan.hasTopBar && <em>(Locked)</em>}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`plan-feature-item ${
+                        !plan.hasTeleprompter ? 'locked' : ''
+                      }`}
+                    >
+                      <i
+                        className={`fa-solid ${
+                          plan.hasTeleprompter
+                            ? 'fa-check check-icon'
+                            : 'fa-lock lock-icon'
+                        }`}
+                      ></i>
+                      <span>
+                        Floating Eye-Line Teleprompter{' '}
+                        {!plan.hasTeleprompter && <em>(Locked)</em>}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`plan-feature-item ${
+                        !plan.canDownloadPdf ? 'locked' : ''
+                      }`}
+                    >
+                      <i
+                        className={`fa-solid ${
+                          plan.canDownloadPdf
+                            ? 'fa-check check-icon'
+                            : 'fa-lock lock-icon'
+                        }`}
+                      ></i>
+                      <span>
+                        PDF &amp; Text Transcript Downloads{' '}
+                        {!plan.canDownloadPdf && <em>(Locked)</em>}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`plan-feature-item ${
+                        !plan.canDownloadAudio ? 'locked' : ''
+                      }`}
+                    >
+                      <i
+                        className={`fa-solid ${
+                          plan.canDownloadAudio
+                            ? 'fa-check check-icon'
+                            : 'fa-lock lock-icon'
+                        }`}
+                      ></i>
+                      <span>
+                        Full Audio Recording Export{' '}
+                        {!plan.canDownloadAudio && <em>(Locked)</em>}
+                      </span>
+                    </div>
+
+                    <div className="plan-feature-item">
+                      <i className="fa-solid fa-check check-icon"></i>
+                      <span>
+                        {plan.storageDays === -1
+                          ? 'Unlimited Cloud Retention'
+                          : `${plan.storageDays} Days Cloud Retention`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action / Upgrade Button */}
+                  {isCurrent ? (
+                    <button className="plan-cta-btn active-current" disabled>
+                      <i className="fa-solid fa-circle-check"></i>
+                      Current Active Plan
+                    </button>
+                  ) : (
+                    <button
+                      className={`plan-cta-btn ${isPopular ? 'primary' : 'secondary'}`}
+                      onClick={() => handleUpgrade(plan)}
+                    >
+                      {userSubscription?.isExpired ? (
+                        <>
+                          <i className="fa-solid fa-rotate"></i>
+                          <span>Renew {plan.name}</span>
+                        </>
+                      ) : (plan.id === 'FREE' || Number(plan.priceMonthly) === 0) ? (
+                        <>
+                          <i className="fa-solid fa-arrow-rotate-left"></i>
+                          <span>Switch to Free Plan ($0)</span>
+                        </>
+                      ) : (plan.priceMonthly < (plans.find(p => p.id === currentTier)?.priceMonthly || 0)) ? (
+                        <>
+                          <i className="fa-solid fa-arrow-right"></i>
+                          <span>Switch to {plan.name}</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-arrow-up"></i>
+                          <span>Upgrade to {plan.name}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* 4th Plan Card: Pay As You Go */}
+            <div className="plan-card payg-card">
+              <div className="plan-card-tag flexible-tag">FLEXIBLE</div>
+
+              <div className="plan-card-header">
+                <h3 className="plan-title">Pay As You Go</h3>
+                <div className="plan-price-row">
+                  <span className="plan-currency">{currencySymbol}</span>
+                  <span className="plan-price-num payg-dash">&ndash;</span>
+                  <span className="plan-period">/ custom</span>
+                </div>
+              </div>
+
+              {/* Custom Enter Amount Input */}
+              <div className="payg-input-section">
+                <label className="payg-input-label">Enter Amount</label>
+                <div className="payg-input-wrapper">
+                  <span className="payg-input-currency">{currencySymbol}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    className="payg-amount-input"
+                    value={payAsYouGoAmount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPayAsYouGoAmount(val);
+                      setSelectedCreditPreset('custom');
+                      setCustomCreditAmount(val);
+                    }}
+                    placeholder="100"
+                  />
+                </div>
+                <div className="payg-credits-calc">
+                  You receive: ~ <strong>{calculateCredits(payAsYouGoAmount).toLocaleString()} credits</strong>
+                </div>
+              </div>
+
+              {/* Pay As You Go Features */}
+              <div className="plan-features-list payg-features-list">
+                <div className="plan-feature-item">
+                  <i className="fa-solid fa-wallet check-icon"></i>
+                  <span>Choose your amount</span>
+                </div>
+                <div className="plan-feature-item">
+                  <i className="fa-solid fa-bolt check-icon"></i>
+                  <span>Credits added instantly</span>
+                </div>
+                <div className="plan-feature-item">
+                  <i className="fa-solid fa-circle-info check-icon"></i>
+                  <span>Use credits for plans &amp; services</span>
+                </div>
+              </div>
+
+              {/* Buy Credits CTA Button */}
+              <button
+                className="plan-cta-btn primary payg-cta-btn"
+                onClick={() => handleOpenBuyCredits(payAsYouGoAmount)}
+              >
+                Buy Credits <i className="fa-solid fa-arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Buy Credits Widget Section */}
+        <section className="buy-credits-section" id="buy-credits-section">
+          <div className="buy-credits-main-card">
+            <div className="buy-credits-content-grid">
+              {/* Left Column: Heading & Description */}
+              <div className="buy-credits-intro">
+                <div className="buy-credits-title-row">
+                  <div className="buy-credits-icon-badge">
+                    <i className="fa-solid fa-coins"></i>
+                  </div>
+                  <h2 className="buy-credits-heading">Buy Credits</h2>
+                </div>
+                <p className="buy-credits-sub">
+                  Get credits and use them for subscriptions, features and more. The more you buy, the more you save!
+                </p>
+              </div>
+
+              {/* Middle Column: Select Amount & Currency */}
+              <div className="buy-credits-controls">
+                <div className="buy-credits-form-group">
+                  <label className="buy-credits-label">Select Amount</label>
+                  <div className="credit-preset-pills">
+                    {[10, 20, 50, 100, 200].map((baseUSD) => {
+                      const convertedPillAmt = currency === 'USD' ? baseUSD : Math.round(convertFromUSD(baseUSD, currency));
+                      const tierCredits = Math.round(baseUSD * CREDITS_PER_USD);
+                      const isSelected = selectedCreditPreset === baseUSD;
+                      return (
+                        <button
+                          key={baseUSD}
+                          type="button"
+                          className={`credit-pill ${isSelected ? 'active' : ''}`}
+                          onClick={() => handleSelectPreset(baseUSD)}
+                        >
+                          <span className="pill-amt">{currencySymbol}{convertedPillAmt.toLocaleString()}</span>
+                          <span className="pill-sub">~ {tierCredits.toLocaleString()} credits</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className={`credit-pill custom-pill ${selectedCreditPreset === 'custom' ? 'active' : ''}`}
+                      onClick={() => handleSelectPreset('custom')}
+                    >
+                      <i className="fa-solid fa-pen"></i>
+                      <span>Custom Amount</span>
+                    </button>
+                  </div>
+
+                  {selectedCreditPreset === 'custom' && (
+                    <div className="custom-amt-input-row">
+                      <span className="custom-amt-prefix">{currencySymbol}</span>
+                      <input
+                        type="number"
+                        min="1"
+                        className="custom-amt-input"
+                        value={customCreditAmount}
+                        onChange={(e) => {
+                          setCustomCreditAmount(e.target.value);
+                          setPayAsYouGoAmount(e.target.value);
+                        }}
+                        placeholder="Enter custom amount"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="buy-credits-currency-group">
+                  <label className="buy-credits-label">Currency</label>
+                  <GlobalCurrencySelector
+                    selectedCurrency={currency}
+                    onSelectCurrency={setCurrency}
+                    compact={false}
+                    darkMode={darkMode}
+                  />
+                  <div className="currency-helper-text">
+                    1 USD = {CREDITS_PER_USD} credits &bull; Live conversion rate applies <i className="fa-solid fa-circle-info"></i>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Checkout Preview Card */}
+              <div className="buy-credits-summary-card">
+                <div className="summary-icon-row">
+                  <div className="summary-icon">
+                    <i className="fa-solid fa-wallet"></i>
+                  </div>
+                </div>
+                <div className="summary-text-block">
+                  <span className="summary-label">You receive</span>
+                  <div className="summary-credits-num">
+                    {activeTotalCredits > 0 ? `${activeTotalCredits.toLocaleString()} credits` : '— credits'}
+                  </div>
+                </div>
+                <button
+                  className="proceed-pay-btn"
+                  onClick={() => handleOpenBuyCredits(activeAmount)}
+                  disabled={!activeAmount || activeAmount <= 0}
+                >
+                  Proceed to Payment <i className="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom Trust Badges */}
+            <div className="buy-credits-trust-bar">
+              <div className="trust-item">
+                <div className="trust-icon"><i className="fa-solid fa-shield-halved"></i></div>
+                <div className="trust-text">
+                  <strong>Secure Payments</strong>
+                  <span>Powered by trusted payment gateways</span>
+                </div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-icon"><i className="fa-solid fa-bolt"></i></div>
+                <div className="trust-text">
+                  <strong>Instant Credit Addition</strong>
+                  <span>Credits added after successful payment</span>
+                </div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-icon"><i className="fa-solid fa-globe"></i></div>
+                <div className="trust-text">
+                  <strong>Multiple Currencies</strong>
+                  <span>Supports INR, USD and more</span>
+                </div>
+              </div>
+              <div className="trust-item">
+                <div className="trust-icon"><i className="fa-solid fa-headset"></i></div>
+                <div className="trust-text">
+                  <strong>24/7 Support</strong>
+                  <span>We&apos;re here to help</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        {/* Feature Comparison Matrix (Direct from PDF Requirements) */}
+        <section className="matrix-section">
+          <h2>Detailed Feature Comparison Matrix</h2>
+
+          <div className="matrix-table-wrapper">
+            <table className="matrix-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '35%' }}>Feature / Capability</th>
+                  {plans.map((p) => (
+                    <th key={p.id} style={{ textAlign: 'center' }}>
+                      {p.name || p.id}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {/* CATEGORY 1: AI COPILOT */}
+                <tr className="category-header-row">
+                  <th colSpan={plans.length + 1}>
+                    Feature 1: AI Copilot (Live Interview Assistant)
+                  </th>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">Monthly Time Limit</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <strong>
+                        {p.copilotMinutes >= 60
+                          ? `${p.copilotMinutes / 60} hours / month (${p.copilotMinutes.toLocaleString()} mins)`
+                          : `${p.copilotMinutes} minutes total (one-time trial)`}
+                      </strong>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">AI Model Used</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      Same AI Model
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="sub-category-row">
+                  <td colSpan={plans.length + 1}>📺 Screen Views</td>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">
+                    • Main App Window (Full screen panel)
+                  </td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">✅ Yes</span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">
+                    • Top Bar View (Slim bar at top of screen)
+                  </td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.hasTopBar ? (
+                        <span className="badge-yes">✅ Unlocked</span>
+                      ) : (
+                        <span className="badge-locked">❌ Locked</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">
+                    • Floating Teleprompter (Camera eye-line box)
+                  </td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.hasTeleprompter ? (
+                        p.id === 'PRO_PLUS' ? (
+                          <span className="badge-exclusive">🌟 Pro Plus Only</span>
+                        ) : (
+                          <span className="badge-yes">✅ Unlocked</span>
+                        )
+                      ) : (
+                        <span className="badge-locked">❌ Locked</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="sub-category-row">
+                  <td colSpan={plans.length + 1}>⚡ Live Assistance</td>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Live Speech-to-Text Transcription</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">
+                        ✅ Yes {p.id === 'FREE' ? `(up to ${p.copilotMinutes} mins)` : ''}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Live Answer Suggestions (A &amp; B)</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">
+                        ✅ Yes {p.id === 'FREE' ? `(up to ${p.copilotMinutes} mins)` : ''}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Coding Mode (Code &amp; Tech interviews)</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">✅ Yes</span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• &ldquo;Ask Question&rdquo; Mic Mode</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">✅ Yes</span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Resume &amp; Job Description (JD) Setup</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.resumeProfiles === -1
+                        ? 'Unlimited Profiles'
+                        : p.resumeProfiles === 1
+                        ? '1 Profile'
+                        : `Up to ${p.resumeProfiles} Profiles`}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Multi-Language Support (Indian &amp; Global)</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">✅ Yes</span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr className="sub-category-row">
+                  <td colSpan={plans.length + 1}>💾 Downloads &amp; Storage</td>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Download PDF / Text Transcript</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canDownloadPdf ? (
+                        <span className="badge-yes">✅ Yes (Included)</span>
+                      ) : (
+                        <span className="badge-locked">❌ No</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Download Full AUDIO Recording</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canDownloadAudio ? (
+                        p.id === 'PRO_PLUS' ? (
+                          <span className="badge-exclusive">🌟 Pro Plus Only</span>
+                        ) : (
+                          <span className="badge-yes">✅ Unlocked</span>
+                        )
+                      ) : (
+                        <span className="badge-locked">❌ No</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Cloud Storage Retention</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.storageDays === -1 ? 'Unlimited' : `${p.storageDays} Days`}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* CATEGORY 2: NOTETAKER */}
+                <tr className="category-header-row">
+                  <th colSpan={plans.length + 1}>
+                    Feature 2: Notetaker (Meeting Intelligence)
+                  </th>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">Monthly Time Limit</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <strong>
+                        {p.notetakerMinutes >= 60
+                          ? `${p.notetakerMinutes / 60} hours / month (${p.notetakerMinutes.toLocaleString()} mins)`
+                          : `${p.notetakerMinutes} minutes total (one-time trial)`}
+                      </strong>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Personal Mode (Mic only)</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">
+                        ✅ Yes {p.id === 'FREE' ? `(up to ${p.notetakerMinutes || 30} mins)` : ''}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Meeting Mode (Mic + Zoom/Teams audio)</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">
+                        ✅ Yes {p.id === 'FREE' ? `(up to ${p.notetakerMinutes || 30} mins)` : ''}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• AI Executive Summary</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.id === 'FREE' ? '1 Sample Summary' : <span className="badge-yes">✅ Unlimited</span>}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Action Items &amp; Decisions</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.id === 'FREE' ? 'View on screen' : <span className="badge-yes">✅ Unlimited</span>}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Copy to Clipboard &amp; Email Notes</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canEmailNotes ? (
+                        <span className="badge-yes">✅ Copy &amp; Email</span>
+                      ) : (
+                        'Copy only'
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* CATEGORY 3: VOICE AGENT */}
+                <tr className="category-header-row">
+                  <th colSpan={plans.length + 1}>
+                    Feature 3: Voice Agent (Mock Interview Simulator)
+                  </th>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">Monthly Practice Time</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <strong>
+                        {p.voiceMinutes >= 60
+                          ? `${p.voiceMinutes / 60} hours / month`
+                          : `${p.voiceMinutes} minutes total (one-time trial)`}
+                      </strong>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Spoken Voice-to-Voice AI Interview</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <span className="badge-yes">
+                        ✅ Yes {p.id === 'FREE' ? `(up to ${p.voiceMinutes} mins)` : ''}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Resume Upload &amp; Skill Extraction</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.voiceResumes === -1
+                        ? 'Unlimited Resumes'
+                        : p.voiceResumes === 1
+                        ? '1 Resume'
+                        : `Up to ${p.voiceResumes} Resumes`}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* CATEGORY 4: MEDIA UPLOAD */}
+                <tr className="category-header-row">
+                  <th colSpan={plans.length + 1}>
+                    Feature 4: Media Upload (Audio &amp; Video Files)
+                  </th>
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">Max File Upload Size</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      <strong>
+                        {p.uploadMaxMb >= 1024
+                          ? `Up to ${p.uploadMaxMb / 1024}GB`
+                          : `Up to ${p.uploadMaxMb}MB`}
+                      </strong>
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">Monthly Transcription Limit</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.uploadHours > 0 ? (
+                        <strong>{p.uploadHours} hours / month</strong>
+                      ) : (
+                        <span className="badge-locked">❌ 0 Hours (Locked)</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Transcribe Speech to Text</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canTranscribe ? (
+                        <span className="badge-yes">🌟 Unlocked</span>
+                      ) : (
+                        <span className="badge-locked">🌟 Locked (Requires Pro)</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Speaker Labels &amp; Timestamps</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canSpeakerLabels ? (
+                        <span className="badge-yes">🌟 Unlocked</span>
+                      ) : (
+                        <span className="badge-locked">🌟 Locked</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• Translate into 22 Languages</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canTranslate ? (
+                        <span className="badge-yes">🌟 Unlocked</span>
+                      ) : (
+                        <span className="badge-locked">🌟 Locked</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <td className="feature-name-cell">• &ldquo;Ask AI&rdquo; Chat About the File</td>
+                  {plans.map((p) => (
+                    <td key={p.id} className="plan-value-cell">
+                      {p.canAskAi ? (
+                        <span className="badge-yes">🌟 Unlocked</span>
+                      ) : (
+                        <span className="badge-locked">🌟 Locked (Requires Pro)</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      {/* Top Up Summary & Confirmation Modal (Quota Top-ups for all users & devices) */}
+      {topUpConfirmModal && (
+        <div
+          className={`topup-summary-backdrop ${darkMode ? 'dark-theme' : 'light-theme'}`}
+          onClick={() => setTopUpConfirmModal(null)}
+        >
+          <div
+            className={`topup-summary-modal-card ${darkMode ? 'dark-theme' : 'light-theme'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="summary-card-header">
+              <div className="summary-title-wrap">
+                <div
+                  className="summary-icon-pill"
+                  style={{
+                    background: topUpConfirmModal.featureId === 'downloads'
+                      ? 'rgba(14, 165, 233, 0.2)'
+                      : topUpConfirmModal.featureId === 'copilot'
+                        ? 'rgba(99, 102, 241, 0.2)'
+                        : topUpConfirmModal.featureId === 'voice'
+                          ? 'rgba(16, 185, 129, 0.2)'
+                          : 'rgba(245, 158, 11, 0.2)',
+                    color: topUpConfirmModal.featureId === 'downloads'
+                      ? '#0ea5e9'
+                      : topUpConfirmModal.featureId === 'copilot'
+                        ? '#818cf8'
+                        : topUpConfirmModal.featureId === 'voice'
+                          ? '#10b981'
+                          : '#f59e0b'
+                  }}
+                >
+                  <i
+                    className={
+                      topUpConfirmModal.featureId === 'downloads'
+                        ? 'fa-solid fa-file-arrow-down'
+                        : topUpConfirmModal.featureId === 'copilot'
+                          ? 'fa-solid fa-robot'
+                          : topUpConfirmModal.featureId === 'voice'
+                            ? 'fa-solid fa-microphone'
+                            : 'fa-solid fa-file-lines'
+                    }
+                  ></i>
+                </div>
+                <div>
+                  <h3 className="summary-modal-title">Top Up Summary</h3>
+                  <span className="summary-modal-sub">Confirm extra capacity for {topUpConfirmModal.featureName}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="summary-close-btn"
+                onClick={() => setTopUpConfirmModal(null)}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="summary-card-body">
+              <div className="summary-item-card">
+                <div className="s-row">
+                  <span className="s-label">Feature</span>
+                  <strong className="s-val">{topUpConfirmModal.featureName}</strong>
+                </div>
+                <div className="s-row">
+                  <span className="s-label">Duration / Quantity</span>
+                  <span className="s-val highlight">+{topUpConfirmModal.qty} {topUpConfirmModal.unit}</span>
+                </div>
+                <div className="s-row">
+                  <span className="s-label">Credits Required</span>
+                  <span className="s-val credits-color">
+                    <i className="fa-solid fa-coins"></i> {topUpConfirmModal.totalCredits.toLocaleString()} Credits
+                  </span>
+                </div>
+                <div className="s-row">
+                  <span className="s-label">Equivalent Amount</span>
+                  <span className="s-val amount-color">
+                    {currencySymbol}{Math.round(convertFromUSD(topUpConfirmModal.totalUSD, currency)).toLocaleString()} {currency} (${topUpConfirmModal.totalUSD.toFixed(2)} USD)
+                  </span>
+                </div>
+              </div>
+
+              <div className="summary-payment-options-section">
+                <label className="payment-options-heading">How would you like to complete this top-up?</label>
+
+                <div className="payment-options-grid">
+                  {/* Option A: Use Available Credits */}
+                  <label className={`summary-choice-card ${modalPaymentChoice === 'credits' ? 'selected' : ''}`}>
+                    <div className="choice-radio">
+                      <input
+                        type="radio"
+                        name="topup_modal_choice"
+                        value="credits"
+                        checked={modalPaymentChoice === 'credits'}
+                        onChange={() => setModalPaymentChoice('credits')}
+                      />
+                    </div>
+                    <div className="choice-text-block">
+                      <div className="choice-title-row">
+                        <span className="choice-title">Use Available Credits</span>
+                        <span className="instant-badge">Instant</span>
+                      </div>
+                      <div className="credits-ledger-box">
+                        <div className="ledger-item">
+                          <span>Available:</span>
+                          <strong>{userAvailableCredits.toLocaleString()}</strong>
+                        </div>
+                        <div className="ledger-item required">
+                          <span>Required:</span>
+                          <strong>-{topUpConfirmModal.totalCredits.toLocaleString()}</strong>
+                        </div>
+                        <div className="ledger-item remaining">
+                          <span>Remaining:</span>
+                          <strong className={userAvailableCredits >= topUpConfirmModal.totalCredits ? 'text-green' : 'text-red'}>
+                            {userAvailableCredits >= topUpConfirmModal.totalCredits
+                              ? (userAvailableCredits - topUpConfirmModal.totalCredits).toLocaleString()
+                              : 'Insufficient'}
+                          </strong>
+                        </div>
+                      </div>
+                      {userAvailableCredits < topUpConfirmModal.totalCredits && (
+                        <span className="not-enough-hint">
+                          ⚠️ You need {(topUpConfirmModal.totalCredits - userAvailableCredits).toLocaleString()} more credits. Choose Payment Method below.
+                        </span>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Option B: Pay with Payment Method */}
+                  <label className={`summary-choice-card ${modalPaymentChoice === 'payment_method' ? 'selected' : ''}`}>
+                    <div className="choice-radio">
+                      <input
+                        type="radio"
+                        name="topup_modal_choice"
+                        value="payment_method"
+                        checked={modalPaymentChoice === 'payment_method'}
+                        onChange={() => setModalPaymentChoice('payment_method')}
+                      />
+                    </div>
+                    <div className="choice-text-block">
+                      <div className="choice-title-row">
+                        <span className="choice-title">Pay using Payment Method</span>
+                        <span className="gateway-badge">Card, UPI, PayPal</span>
+                      </div>
+                      <p className="choice-subtext">
+                        Pay {currencySymbol}{Math.round(convertFromUSD(topUpConfirmModal.totalUSD, currency)).toLocaleString()} {currency} directly using Debit/Credit Card, UPI, Google Pay, PhonePe, Paytm, or Net Banking.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="summary-card-footer">
+              <button
+                type="button"
+                className="summary-cancel-btn"
+                onClick={() => setTopUpConfirmModal(null)}
+              >
+                Cancel
+              </button>
+
+              {modalPaymentChoice === 'credits' ? (
+                <button
+                  type="button"
+                  className="summary-confirm-btn"
+                  onClick={handleConfirmCreditsTopUpFromModal}
+                  disabled={userAvailableCredits < topUpConfirmModal.totalCredits}
+                >
+                  <i className="fa-solid fa-check"></i>
+                  <span>Confirm Top Up with Credits</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="summary-confirm-btn btn-payment-method"
+                  onClick={handleProceedPaymentMethodFromModal}
+                >
+                  <span>Continue to Payment ({currencySymbol}{Math.round(convertFromUSD(topUpConfirmModal.totalUSD, currency)).toLocaleString()})</span>
+                  <i className="fa-solid fa-arrow-right"></i>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reusable Payment Checkout Modal (Handles both Subscription & Credit Top-ups) */}
+      <PaymentCheckoutModal
+        isOpen={checkoutModalOpen}
+        onClose={() => setCheckoutModalOpen(false)}
+        type={checkoutType}
+        plan={selectedCheckoutPlan}
+        billingCycle={billingCycle}
+        creditTopUpAmount={creditTopUpAmount}
+        targetCredits={targetCheckoutCredits}
+        currency={currency}
+        customTitle={customCheckoutTitle}
+        onSuccessExtra={topUpSuccessCallback}
+        onCurrencyChange={setCurrency}
+        showToast={showToast}
+        onPaymentSuccess={handlePaymentSuccess}
+        darkMode={darkMode}
+        token={token}
+        onViewHistory={() => {
+          setCheckoutModalOpen(false);
+          setHistoryModalOpen(true);
+        }}
+      />
+
+      {/* Subscription Plan Validity & Payment History Modal */}
+      <SubscriptionHistoryModal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        userSubscription={userSubscription}
+        billingCycle={billingCycle}
+        userCredits={userAvailableCredits}
+        darkMode={darkMode}
+        showToast={showToast}
+        onUpgradeClick={() => {
+          const el = document.querySelector('.plan-cards-section');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onGoToUsage={onGoToUsage}
+      />
+    </div>
+  );
+}

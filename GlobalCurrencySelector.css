@@ -1,0 +1,422 @@
+/* Global Currency Selector Styling - Light & Dark Theme Support */
+.global-currency-selector-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1050;
+  user-select: none;
+}
+
+/* --- TRIGGER BUTTON --- */
+/* Light Mode (default) */
+.global-currency-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.global-currency-trigger-btn:hover,
+.global-currency-trigger-btn.open {
+  background: #f8fafc;
+  border-color: #6366f1;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.16);
+  color: #0f172a;
+}
+
+/* Dark Mode Trigger Button */
+.global-currency-selector-wrapper.dark-theme .global-currency-trigger-btn,
+body.dark-theme .global-currency-selector-wrapper .global-currency-trigger-btn,
+.subscription-page-root.dark-theme .global-currency-trigger-btn {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+}
+
+.global-currency-selector-wrapper.dark-theme .global-currency-trigger-btn:hover,
+.global-currency-selector-wrapper.dark-theme .global-currency-trigger-btn.open,
+body.dark-theme .global-currency-selector-wrapper .global-currency-trigger-btn:hover,
+body.dark-theme .global-currency-selector-wrapper .global-currency-trigger-btn.open,
+.subscription-page-root.dark-theme .global-currency-trigger-btn:hover,
+.subscription-page-root.dark-theme .global-currency-trigger-btn.open {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+  color: #ffffff;
+}
+
+.currency-flag-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.currency-code-text {
+  letter-spacing: 0.03em;
+}
+
+.currency-symbol-tag {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-symbol-tag,
+body.dark-theme .global-currency-selector-wrapper .currency-symbol-tag,
+.subscription-page-root.dark-theme .currency-symbol-tag {
+  color: #94a3b8;
+}
+
+.currency-arrow-icon {
+  font-size: 10px;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-arrow-icon,
+body.dark-theme .global-currency-selector-wrapper .currency-arrow-icon,
+.subscription-page-root.dark-theme .currency-arrow-icon {
+  color: #94a3b8;
+}
+
+.currency-arrow-icon.rotate {
+  transform: rotate(180deg);
+}
+
+/* Exchange Rate Badge */
+.currency-exchange-rate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #4f46e5;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-exchange-rate-badge,
+body.dark-theme .global-currency-selector-wrapper .currency-exchange-rate-badge,
+.subscription-page-root.dark-theme .currency-exchange-rate-badge {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.currency-exchange-rate-badge i {
+  font-size: 10px;
+}
+
+/* --- DROPDOWN MENU --- */
+.global-currency-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-width: 90vw;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 2000;
+  animation: currencyFadeIn 0.15s ease-out;
+}
+
+/* Dark Mode Dropdown */
+.global-currency-selector-wrapper.dark-theme .global-currency-dropdown-menu,
+body.dark-theme .global-currency-selector-wrapper .global-currency-dropdown-menu,
+.subscription-page-root.dark-theme .global-currency-dropdown-menu {
+  background: #0f172a;
+  background: linear-gradient(180deg, #111d38 0%, #0d1527 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(99, 102, 241, 0.2);
+}
+
+@keyframes currencyFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Search Header */
+.currency-search-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-search-header,
+body.dark-theme .global-currency-selector-wrapper .currency-search-header,
+.subscription-page-root.dark-theme .currency-search-header {
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.currency-search-header .search-icon {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-search-header .search-icon,
+body.dark-theme .global-currency-selector-wrapper .currency-search-header .search-icon,
+.subscription-page-root.dark-theme .currency-search-header .search-icon {
+  color: #64748b;
+}
+
+.currency-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-search-input,
+body.dark-theme .global-currency-selector-wrapper .currency-search-input,
+.subscription-page-root.dark-theme .currency-search-input {
+  color: #f8fafc;
+}
+
+.currency-search-input::placeholder {
+  color: #94a3b8;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-search-input::placeholder,
+body.dark-theme .global-currency-selector-wrapper .currency-search-input::placeholder,
+.subscription-page-root.dark-theme .currency-search-input::placeholder {
+  color: #64748b;
+}
+
+.currency-search-clear-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.currency-search-clear-btn:hover {
+  color: #0f172a;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-search-clear-btn,
+body.dark-theme .global-currency-selector-wrapper .currency-search-clear-btn,
+.subscription-page-root.dark-theme .currency-search-clear-btn {
+  color: #94a3b8;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-search-clear-btn:hover,
+body.dark-theme .global-currency-selector-wrapper .currency-search-clear-btn:hover,
+.subscription-page-root.dark-theme .currency-search-clear-btn:hover {
+  color: #ffffff;
+}
+
+/* Options Scroll List */
+.currency-options-scroll-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-options-scroll-list,
+body.dark-theme .global-currency-selector-wrapper .currency-options-scroll-list,
+.subscription-page-root.dark-theme .currency-options-scroll-list {
+  scrollbar-color: #334155 transparent;
+}
+
+.currency-options-scroll-list::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.currency-options-scroll-list::-webkit-scrollbar-track {
+  background: transparent !important;
+  border: none !important;
+}
+
+.currency-options-scroll-list::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: none;
+  transition: background 0.2s ease;
+}
+
+.currency-options-scroll-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.22);
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-options-scroll-list::-webkit-scrollbar-thumb,
+body.dark-theme .global-currency-selector-wrapper .currency-options-scroll-list::-webkit-scrollbar-thumb,
+.subscription-page-root.dark-theme .currency-options-scroll-list::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+/* Currency Option Item */
+.currency-option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.currency-option-item:hover {
+  background: #f1f5f9;
+}
+
+.currency-option-item.selected {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+/* Dark Mode Option Item */
+.global-currency-selector-wrapper.dark-theme .currency-option-item:hover,
+body.dark-theme .global-currency-selector-wrapper .currency-option-item:hover,
+.subscription-page-root.dark-theme .currency-option-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-option-item.selected,
+body.dark-theme .global-currency-selector-wrapper .currency-option-item.selected,
+.subscription-page-root.dark-theme .currency-option-item.selected {
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+.currency-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.currency-item-flag {
+  font-size: 18px;
+}
+
+.currency-item-names {
+  display: flex;
+  flex-direction: column;
+}
+
+.currency-item-country {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-item-country,
+body.dark-theme .global-currency-selector-wrapper .currency-item-country,
+.subscription-page-root.dark-theme .currency-item-country {
+  color: #f8fafc;
+}
+
+.currency-item-name {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-item-name,
+body.dark-theme .global-currency-selector-wrapper .currency-item-name,
+.subscription-page-root.dark-theme .currency-item-name {
+  color: #94a3b8;
+}
+
+.currency-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currency-item-code {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-item-code,
+body.dark-theme .global-currency-selector-wrapper .currency-item-code,
+.subscription-page-root.dark-theme .currency-item-code {
+  color: #cbd5e1;
+}
+
+.currency-item-symbol {
+  font-size: 12px;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-item-symbol,
+body.dark-theme .global-currency-selector-wrapper .currency-item-symbol,
+.subscription-page-root.dark-theme .currency-item-symbol {
+  color: #818cf8;
+}
+
+.currency-option-item.selected .check-icon {
+  color: #059669;
+  font-size: 12px;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-option-item.selected .check-icon,
+body.dark-theme .global-currency-selector-wrapper .currency-option-item.selected .check-icon,
+.subscription-page-root.dark-theme .currency-option-item.selected .check-icon {
+  color: #10b981;
+}
+
+.currency-no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.currency-no-results i {
+  font-size: 20px;
+  color: #94a3b8;
+}
+
+.global-currency-selector-wrapper.dark-theme .currency-no-results i,
+body.dark-theme .global-currency-selector-wrapper .currency-no-results i,
+.subscription-page-root.dark-theme .currency-no-results i {
+  color: #475569;
+}

@@ -1,0 +1,318 @@
+/* CreditUsagePromptModal.css - Premium Serif & Dark Glassmorphism Styling */
+
+.credit-usage-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 15, 29, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 20px;
+  animation: creditModalFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-family, 'Lora', 'Merriweather', Georgia, serif);
+}
+
+@keyframes creditModalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.credit-usage-modal-card {
+  width: 100%;
+  max-width: 480px;
+  background: linear-gradient(145deg, #131b2e, #0e1526);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(99, 102, 241, 0.15);
+  border-radius: 20px;
+  overflow: hidden;
+  color: #f1f5f9;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.credit-usage-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px 12px 28px;
+}
+
+.credit-usage-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.credit-usage-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.credit-usage-close-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.credit-usage-modal-body {
+  padding: 8px 28px 20px 28px;
+}
+
+.credit-usage-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+
+.credit-usage-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.3px;
+  line-height: 1.3;
+}
+
+.credit-usage-description {
+  font-size: 14px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0 0 20px 0;
+}
+
+.credit-usage-info-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.credit-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.credit-info-label {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.credit-info-value {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.credit-info-value.highlight {
+  color: #38bdf8;
+}
+
+.credit-info-value.exhausted {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.credit-info-value.cost-value {
+  color: #fbbf24;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.credit-info-value.balance-ok {
+  color: #34d399;
+}
+
+.credit-info-value.balance-low {
+  color: #f87171;
+}
+
+.credit-info-value.balance-after {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.filename-truncated {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.credit-info-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 4px 0;
+}
+
+.credit-insufficient-alert {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #fca5a5;
+  font-size: 12.5px;
+}
+
+.credit-insufficient-alert i {
+  color: #ef4444;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.credit-insufficient-alert strong {
+  display: block;
+  color: #fecaca;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.credit-insufficient-alert p {
+  margin: 0;
+  color: #fca5a5;
+}
+
+.credit-usage-footnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.credit-usage-footnote i {
+  color: #38bdf8;
+  margin-top: 2px;
+}
+
+.credit-usage-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 28px 24px 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 15, 28, 0.4);
+}
+
+.credit-usage-btn-cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  padding: 11px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.credit-usage-btn-cancel:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.credit-usage-btn-confirm {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border: none;
+  color: #ffffff;
+  padding: 11px 22px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.35);
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.credit-usage-btn-confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.45);
+  transform: translateY(-1px);
+}
+
+.credit-usage-btn-topup {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  border: none;
+  color: #ffffff;
+  padding: 11px 22px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.35);
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.credit-usage-btn-topup:hover {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.45);
+  transform: translateY(-1px);
+}
+
+.credit-usage-btn-cancel:disabled,
+.credit-usage-btn-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
